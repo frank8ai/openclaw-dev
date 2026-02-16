@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenClaw Dev Supervisor"
+  short_description: "Autonomous dev workflow for OpenClaw + Codex"
+  default_prompt: "Set up agent/ templates, run codex exec/resume loops, enforce tests, and keep outputs in files with minimal chat tokens."

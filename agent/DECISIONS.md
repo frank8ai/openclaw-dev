@@ -1,0 +1,3 @@
+# Decisions Needed
+- [ ] 是否允许新增依赖 X？原因：...
+- [ ] API 方案 A vs B 选择？
