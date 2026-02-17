@@ -64,7 +64,7 @@ def build_prompt(step: dict | None) -> str:
     return (
         "You are running inside a repo. First, write a concrete 3-6 step plan to agent/PLAN.md and then immediately start executing it. "
         "Rules: follow agent/POLICY.md and agent/TASK.md; read agent/COMMANDS.env for TEST_CMD/LINT_CMD/TYPECHECK_CMD/BUILD_CMD. "
-        "Update agent/HOT.md every run and agent/WARM.md on milestone completion. "
+        "Update agent/HOT.md every run and agent/WARM.md on milestone completion; keep within agent/CONTEXT.json budgets. "
         "Update agent/STATUS.json after each step. Do NOT paste large logs; write only tail summaries. "
         "When acceptance passes (TEST_CMD), write agent/RESULT.md (files changed, git diff --stat, verification, risks) and set STATUS.state=done. "
         "If you need a human decision, write agent/DECISIONS.md and set STATUS.state=blocked. "
