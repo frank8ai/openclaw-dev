@@ -11,6 +11,7 @@ if [ -f pnpm-lock.yaml ]; then pnpm -s test;
 elif [ -f package-lock.json ]; then npm test;
 elif [ -f yarn.lock ]; then yarn test;
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then pytest -q;
+elif ls scripts/*.py >/dev/null 2>&1; then python3 -m py_compile scripts/*.py;
 else echo "no tests"; fi
 '
 

@@ -19,6 +19,7 @@ if [ -f pnpm-lock.yaml ]; then pnpm -s test;
 elif [ -f package-lock.json ]; then npm test;
 elif [ -f yarn.lock ]; then yarn test;
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then pytest -q;
+elif ls scripts/*.py >/dev/null 2>&1; then python3 -m py_compile scripts/*.py;
 else echo "no tests"; fi
 '
 
@@ -161,7 +162,21 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
         config["supervisor"] = supervisor
 
     if force or not isinstance(supervisor.get("default_scope"), str) or not supervisor["default_scope"].strip():
-        supervisor["default_scope"] = "openclaw-dev-repo/"
+        supervisor["default_scope"] = "."
+
+    add_dirs = supervisor.get("add_dirs")
+    if not isinstance(add_dirs, list):
+        add_dirs = []
+
+    # Common case: "<name>-repo" syncs back to sibling "skills/<name>".
+    if repo.name.endswith("-repo"):
+        mirror_name = repo.name[:-5]
+        mirror_rel = f"../skills/{mirror_name}"
+        mirror_abs = (repo / mirror_rel).resolve()
+        if mirror_abs.exists() and mirror_abs.is_dir() and mirror_rel not in add_dirs:
+            add_dirs.append(mirror_rel)
+
+    supervisor["add_dirs"] = add_dirs
 
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

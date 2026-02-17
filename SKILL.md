@@ -51,12 +51,27 @@ python3 scripts/supervisor_loop.py --repo /path/to/repo --run-once
 ```
 Or run periodically:
 ```bash
-python3 scripts/supervisor_loop.py --repo /path/to/repo --interval 1800
+python3 scripts/supervisor_loop.py --repo /path/to/repo --interval 1800 --codex-timeout 300 --max-attempts 12
 ```
 First run with a fresh exec (no prior Codex session):
 ```bash
 python3 scripts/supervisor_loop.py --repo /path/to/repo --run-once --start --full-auto
 ```
+
+If the task needs writes outside the repo (for example syncing to sibling `../skills/...`), declare writable dirs in `openclaw.json`:
+```json
+{
+  "supervisor": {
+    "add_dirs": ["../skills/openclaw-dev"]
+  }
+}
+```
+You can also pass them at runtime:
+```bash
+python3 scripts/supervisor_loop.py --repo /path/to/repo --run-once --add-dir ../skills/openclaw-dev
+```
+When a step objective includes `sync` + `skill`, supervisor will run host-side `scripts/sync_to_skill.py` directly (not via Codex shell), so sync no longer depends on Codex sandbox writes.
+For these sync steps, supervisor also bypasses the Codex no-progress fallback path, avoiding accidental rewrites of `agent/PLAN.md`/`agent/HOT.md`.
 
 ### 5) Handle blocked decisions
 If `agent/STATUS.json` is `blocked`, answer the item in `agent/DECISIONS.md`, then resume.

@@ -1,5 +1,8 @@
 {
   "supervisor": {
-    "default_scope": "."
+    "default_scope": ".",
+    "add_dirs": [
+      "../skills/openclaw-dev"
+    ]
   }
 }
