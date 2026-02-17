@@ -73,6 +73,12 @@ In sync steps, supervisor skips Codex no-progress fallback, so it will not rewri
 - When the agent needs human approval (new deps, API changes), it writes to `agent/DECISIONS.md` and sets `STATUS.state=blocked`.
 
 ## Documentation
+- English
 - `docs/USAGE.md`
 - `docs/WORKFLOW.md`
 - `docs/TROUBLESHOOTING.md`
+- Chinese
+- `README_CN.md`
+- `docs/USAGE_CN.md`
+- `docs/WORKFLOW_CN.md`
+- `docs/TROUBLESHOOTING_CN.md`
