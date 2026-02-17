@@ -1,0 +1,5 @@
+{
+  "supervisor": {
+    "default_scope": "."
+  }
+}

@@ -15,6 +15,9 @@ This creates:
 - `agent/DECISIONS.md`
 - `agent/RESULT.md`
 - `agent/PLAN.md`
+- `agent/BLUEPRINT.json`
+- `agent/CONTEXT.json`
+- `agent/HOT.md` / `agent/WARM.md` / `agent/COLD.ref.json`
 
 ## 2) Start the Codex loop (first run)
 ```bash

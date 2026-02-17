@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 COMMANDS_ENV = """export NEXUS_PYTHON_PATH="$HOME/.openclaw/workspace/skills/deepsea-nexus/.venv-3.13/bin/python"
+
+CHECKPOINT_MODE='patch'
 
 TEST_CMD='
 if [ -f pnpm-lock.yaml ]; then pnpm -s test;
@@ -34,16 +35,24 @@ POLICY_MD = """目标：在保证测试通过的前提下，最小改动、最�
 - 禁止新增依赖；若必须新增，写入 DECISIONS.md 并 blocked。
 - 不做大重构；每次只完成一个里程碑。
 - 终端输出只保留错误段 + 最后 150 行。
+- 每次运行必须更新 HOT.md（当前任务/错误/路径），里程碑完成更新 WARM.md。
 - 最终必须写 RESULT.md（files、diff--stat、验证、风险）。
+
+上下文纪律：
+- Prompt 只允许包含 HOT/WARM/ERROR_TAIL（禁止长日志/大段代码回填）。
+- 冷记忆只保留引用（COLD.ref.json）。
 """
 
 
 STATUS_JSON = {
     "state": "idle",
     "last_update": "",
+    "current_step": 0,
     "current_milestone": 0,
+    "checkpoint_id": "",
     "last_cmd": "",
     "last_test_ok": False,
+    "last_error_sig": "",
     "needs_human": False,
     "human_question": "",
 }
@@ -69,6 +78,92 @@ PLAN_MD = """# Plan
 2.
 3.
 """
+
+
+BLUEPRINT_JSON = """{
+  "version": "1.0",
+  "steps": [
+    {
+      "id": 1,
+      "name": "spec",
+      "objective": "Read TASK.md and write a short PLAN.md",
+      "checkpoint": true
+    },
+    {
+      "id": 2,
+      "name": "implement",
+      "objective": "Implement changes per PLAN.md with minimal diffs",
+      "checkpoint": true
+    },
+    {
+      "id": 3,
+      "name": "verify",
+      "objective": "Run TEST_CMD and fix failures",
+      "checkpoint": false
+    },
+    {
+      "id": 4,
+      "name": "finalize",
+      "objective": "Write RESULT.md and set STATUS.state=done",
+      "checkpoint": false
+    }
+  ]
+}
+"""
+
+
+CONTEXT_JSON = """{
+  "hot_budget": 1000,
+  "warm_budget": 1500,
+  "cold_top_k": 4,
+  "total_budget": 3500,
+  "compression_triggers": [0.6, 0.75, 0.85]
+}
+"""
+
+
+HOT_MD = """# HOT
+- Current step:
+- Current error:
+- Relevant files/paths:
+- Constraints:
+"""
+
+
+WARM_MD = """# WARM
+- Stage summary:
+- Decisions:
+- Next steps:
+"""
+
+
+COLD_REF_JSON = """{
+  "refs": []
+}
+"""
+
+
+def ensure_openclaw_config(repo: Path, force: bool) -> None:
+    config_path = repo / "openclaw.json"
+    config: dict = {}
+
+    if config_path.exists():
+        try:
+            loaded = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            loaded = {}
+        if isinstance(loaded, dict):
+            config = loaded
+
+    supervisor = config.get("supervisor")
+    if not isinstance(supervisor, dict):
+        supervisor = {}
+        config["supervisor"] = supervisor
+
+    if force or not isinstance(supervisor.get("default_scope"), str) or not supervisor["default_scope"].strip():
+        supervisor["default_scope"] = "openclaw-dev-repo/"
+
+    config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def task_md(task: str) -> str:
@@ -112,12 +207,22 @@ def main() -> None:
     write_file(agent_dir / "RESULT.md", RESULT_MD, args.force)
     write_file(agent_dir / "PLAN.md", PLAN_MD, args.force)
     write_file(agent_dir / "TASK.md", task_md(args.task), args.force)
+    write_file(agent_dir / "BLUEPRINT.json", BLUEPRINT_JSON, args.force)
+    write_file(agent_dir / "CONTEXT.json", CONTEXT_JSON, args.force)
+    write_file(agent_dir / "HOT.md", HOT_MD, args.force)
+    write_file(agent_dir / "WARM.md", WARM_MD, args.force)
+    write_file(agent_dir / "COLD.ref.json", COLD_REF_JSON, args.force)
 
     status_path = agent_dir / "STATUS.json"
     if not status_path.exists() or args.force:
         status = dict(STATUS_JSON)
         status["last_update"] = datetime.now().isoformat(timespec="seconds")
         status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    ensure_openclaw_config(repo, args.force)
+
+    checkpoints = agent_dir / "checkpoints"
+    checkpoints.mkdir(parents=True, exist_ok=True)
 
     print(f"Initialized agent/ templates in {agent_dir}")
 

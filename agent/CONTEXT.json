@@ -1,0 +1,11 @@
+{
+  "hot_budget": 1000,
+  "warm_budget": 1500,
+  "cold_top_k": 4,
+  "total_budget": 3500,
+  "compression_triggers": [
+    0.6,
+    0.75,
+    0.85
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "steps": [
+    {
+      "id": 1,
+      "name": "spec",
+      "objective": "Read TASK.md and write PLAN.md",
+      "checkpoint": true
+    },
+    {
+      "id": 2,
+      "name": "implement",
+      "objective": "Implement changes per PLAN.md",
+      "checkpoint": true
+    },
+    {
+      "id": 3,
+      "name": "verify",
+      "objective": "Run TEST_CMD and fix failures",
+      "checkpoint": false
+    },
+    {
+      "id": 4,
+      "name": "finalize",
+      "objective": "Write RESULT.md and set STATUS.state=done",
+      "checkpoint": false
+    }
+  ]
+}

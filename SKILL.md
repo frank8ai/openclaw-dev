@@ -23,6 +23,9 @@ This creates:
 - `agent/DECISIONS.md` (human approvals)
 - `agent/RESULT.md` (final delivery summary)
 - `agent/PLAN.md` (short execution plan)
+- `agent/BLUEPRINT.json` (deterministic steps)
+- `agent/CONTEXT.json` (budgets and thresholds)
+- `agent/HOT.md` / `agent/WARM.md` / `agent/COLD.ref.json`
 
 ### 2) Write a tight task spec
 Edit `agent/TASK.md` with:
@@ -69,6 +72,7 @@ Completion requires:
 - All changes checkpointed with `diff --stat` in RESULT.
 - No new deps without DECISIONS approval.
 - Use `agent/STATUS.json` as the single source of truth.
+- Keep HOT/WARM small; cold context is reference only.
 
 ## Scripts
 - `scripts/init_openclaw_dev.py` — create agent/ files + templates.

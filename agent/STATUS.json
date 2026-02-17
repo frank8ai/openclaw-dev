@@ -1,9 +1,12 @@
 {
   "state": "idle",
   "last_update": "2026-02-16T23:50:29",
+  "current_step": 0,
   "current_milestone": 0,
+  "checkpoint_id": "",
   "last_cmd": "",
   "last_test_ok": false,
+  "last_error_sig": "",
   "needs_human": false,
   "human_question": ""
 }

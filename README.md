@@ -7,6 +7,7 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `scripts/init_openclaw_dev.py`: initializes `agent/` templates in any target repo.
 - `scripts/supervisor_loop.py`: resumes Codex work, runs tests, and updates `agent/STATUS.json`.
 - `references/agent_templates.md`: canonical templates for `agent/` files.
+- Deterministic `agent/BLUEPRINT.json` and minimal-context `agent/HOT.md`/`agent/WARM.md`.
 
 ## Quickstart
 1) Initialize `agent/` templates in your target repo
@@ -31,7 +32,7 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
 ```
 
 ## Version
-- `VERSION` file and Git tag `v1.0.0`.
+- `VERSION` file and Git tag `v2.0.0`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.
