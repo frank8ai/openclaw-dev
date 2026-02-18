@@ -8,6 +8,7 @@ OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可�
 - `scripts/supervisor_loop.py`: 循环驱动 Codex 执行/续跑，并更新 `agent/STATUS.json`。
 - `scripts/run_supervisor_daemon.sh`: 用于本机无人值守常驻执行 supervisor 的封装脚本。
 - `scripts/trigger_supervisor.py`: 事件触发执行（可附带新任务并 kickstart launchd）。
+- `scripts/memory_namespace.py`: tenant/agent/project 记忆命名空间解析与初始化工具。
 - `scripts/autopr.py`: 可选的自动分支/提交/PR/自动合并脚本。
 - `scripts/sync_to_skill.py`: 在主机侧同步文件到本地 skill 副本目录。
 - 可选第二大脑上下文注入（Daily Index + Session Slice），用于长任务降 token。
@@ -97,14 +98,31 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "max_chars": 1800
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "strict_isolation": true,
+      "allow_cross_project": false
     }
   }
 }
 ```
 该模式只注入紧凑关键信息，降低长会话 token 消耗。
+
+可选：初始化命名空间目录骨架：
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id my-repo \
+  init
+```
+`resolve` 子命令仅解析并输出路径，不写入文件。
 
 ## 质量门禁
 一键执行全部门禁：
@@ -126,6 +144,7 @@ make review
 - 中文
 - `docs/USAGE_CN.md`
 - `docs/WORKFLOW_CN.md`
+- `docs/MEMORY_NAMESPACE_SOP.md`
 - `docs/TROUBLESHOOTING_CN.md`
 - English
 - `README.md`

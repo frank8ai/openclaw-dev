@@ -42,6 +42,9 @@ POLICY_MD = """目标：在保证质量门禁通过的前提下，最小改动�
 STATUS_JSON = {
     "state": "idle",
     "last_update": "",
+    "tenant_id": "default",
+    "agent_id": "main",
+    "project_id": "default",
     "current_step": 0,
     "current_milestone": 0,
     "checkpoint_id": "",
@@ -184,11 +187,17 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
     if force or "enabled" not in second_brain:
         second_brain["enabled"] = False
     if force or not isinstance(second_brain.get("root"), str):
-        second_brain["root"] = "."
+        second_brain["root"] = ".."
     if force or not isinstance(second_brain.get("daily_index_template"), str):
-        second_brain["daily_index_template"] = "90_Memory/{date}/_DAILY_INDEX.md"
+        second_brain["daily_index_template"] = (
+            "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md"
+        )
     if force or not isinstance(second_brain.get("session_glob_template"), str):
-        second_brain["session_glob_template"] = "90_Memory/{date}/session_*.md"
+        second_brain["session_glob_template"] = (
+            "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
+        )
+    if force or not isinstance(second_brain.get("memory_template"), str):
+        second_brain["memory_template"] = "brain/tenants/{tenant_id}/global/MEMORY.md"
     if force or "include_memory_md" not in second_brain:
         second_brain["include_memory_md"] = True
     if force or not isinstance(second_brain.get("max_chars"), int):
@@ -198,6 +207,35 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
     if force or not isinstance(second_brain.get("max_lines_per_file"), int):
         second_brain["max_lines_per_file"] = 40
     supervisor["second_brain"] = second_brain
+
+    memory_namespace = supervisor.get("memory_namespace")
+    if not isinstance(memory_namespace, dict):
+        memory_namespace = {}
+    if force or "enabled" not in memory_namespace:
+        memory_namespace["enabled"] = True
+    if force or not isinstance(memory_namespace.get("root"), str):
+        memory_namespace["root"] = ".."
+    if force or not isinstance(memory_namespace.get("tenant_id"), str):
+        memory_namespace["tenant_id"] = "default"
+    if force or not isinstance(memory_namespace.get("default_agent_id"), str):
+        memory_namespace["default_agent_id"] = "main"
+    if force or not isinstance(memory_namespace.get("default_project_id"), str):
+        memory_namespace["default_project_id"] = repo.name
+    if force or "strict_isolation" not in memory_namespace:
+        memory_namespace["strict_isolation"] = True
+    if force or "allow_cross_project" not in memory_namespace:
+        memory_namespace["allow_cross_project"] = False
+    if force or not isinstance(memory_namespace.get("global_memory_template"), str):
+        memory_namespace["global_memory_template"] = "brain/tenants/{tenant_id}/global/MEMORY.md"
+    if force or not isinstance(memory_namespace.get("daily_index_template"), str):
+        memory_namespace["daily_index_template"] = (
+            "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md"
+        )
+    if force or not isinstance(memory_namespace.get("session_glob_template"), str):
+        memory_namespace["session_glob_template"] = (
+            "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
+        )
+    supervisor["memory_namespace"] = memory_namespace
 
     autopr = supervisor.get("autopr")
     if not isinstance(autopr, dict):
@@ -276,6 +314,7 @@ def main() -> None:
     if not status_path.exists() or args.force:
         status = dict(STATUS_JSON)
         status["last_update"] = datetime.now().isoformat(timespec="seconds")
+        status["project_id"] = repo.name
         status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     ensure_openclaw_config(repo, args.force)

@@ -9,12 +9,25 @@
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "include_memory_md": true,
       "max_chars": 1800,
       "max_sessions": 1,
       "max_lines_per_file": 40
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "root": "..",
+      "tenant_id": "default",
+      "default_agent_id": "main",
+      "default_project_id": "openclaw-dev-repo",
+      "strict_isolation": true,
+      "allow_cross_project": false,
+      "global_memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
     },
     "autopr": {
       "enabled": false,

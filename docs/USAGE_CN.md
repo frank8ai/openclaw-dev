@@ -119,7 +119,10 @@ launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor
 python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
-  --task "实现功能 X"
+  --task "实现功能 X" \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo
 ```
 默认会尝试对 `com.openclaw.dev-supervisor` 执行 `launchctl kickstart`。
 为避免重复触发，命令默认启用去重窗口（`--dedup-seconds`，默认 `90` 秒）。
@@ -153,17 +156,46 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "include_memory_md": true,
       "max_chars": 1800,
       "max_sessions": 1,
       "max_lines_per_file": 40
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "tenant_id": "default",
+      "default_agent_id": "main",
+      "default_project_id": "your-repo",
+      "strict_isolation": true,
+      "allow_cross_project": false
     }
   }
 }
 ```
 开启后，supervisor 会把 Daily/Session 的关键信息以压缩格式注入 prompt，降低长会话 token 开销。
+
+## 3.8) 初始化命名空间目录
+创建 tenant/agent/project 记忆目录骨架：
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo \
+  init
+```
+仅解析路径（不写文件）：
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo \
+  resolve
+```
 
 ## 4) 处理人工决策
 当 `agent/STATUS.json.state = blocked` 时，查看 `agent/DECISIONS.md` 并回答后再继续：

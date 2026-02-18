@@ -8,6 +8,7 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `scripts/supervisor_loop.py`: resumes Codex work, runs tests, and updates `agent/STATUS.json`.
 - `scripts/run_supervisor_daemon.sh`: wrapper for unattended long-running supervisor execution.
 - `scripts/trigger_supervisor.py`: event-driven trigger (optional task update + launchd kickstart).
+- `scripts/memory_namespace.py`: namespace resolver/bootstrap for tenant-agent-project memory isolation.
 - `scripts/autopr.py`: optional branch/commit/PR/auto-merge automation.
 - `scripts/sync_to_skill.py`: host-side sync from repo to local skill copy.
 - `references/agent_templates.md`: canonical templates for `agent/` files.
@@ -96,14 +97,31 @@ Requires `gh` CLI and authenticated GitHub session.
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "max_chars": 1800
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "strict_isolation": true,
+      "allow_cross_project": false
     }
   }
 }
 ```
 This keeps prompt context compact while preserving key decisions and active session intent.
+
+9) Bootstrap namespaced memory skeleton:
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id my-repo \
+  init
+```
+Use `resolve` subcommand to inspect effective paths without writing files.
 
 ## Iter-2 utilities
 - `scripts/para_recall.py`: lightweight memory recall over `memory/`.
@@ -131,7 +149,7 @@ make review
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 
 ## Version
-- `VERSION` file and Git tag `v2.3.0`.
+- `VERSION` file and Git tag `v2.4.0`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.
@@ -142,6 +160,7 @@ make review
 - English
 - `docs/USAGE.md`
 - `docs/WORKFLOW.md`
+- `docs/MEMORY_NAMESPACE_SOP.md`
 - `docs/TROUBLESHOOTING.md`
 - `docs/QUALITY_GATES.md`
 - Chinese

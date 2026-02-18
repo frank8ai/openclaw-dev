@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -51,6 +52,15 @@ def write_status(path: Path, status: dict) -> None:
     path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def normalize_identifier(value: object, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return fallback
+    return re.sub(r"[^a-z0-9._-]+", "-", cleaned)
+
+
 def maybe_kickstart(label: str) -> tuple[int, str]:
     cmd = [
         "launchctl",
@@ -66,8 +76,18 @@ def maybe_kickstart(label: str) -> tuple[int, str]:
     return proc.returncode, message
 
 
-def trigger_fingerprint(reason: str, task: str, reset_step: bool) -> str:
-    payload = f"{reason.strip()}|{task.strip()}|{int(reset_step)}"
+def trigger_fingerprint(
+    reason: str,
+    task: str,
+    reset_step: bool,
+    tenant_id: str,
+    agent_id: str,
+    project_id: str,
+) -> str:
+    payload = (
+        f"{reason.strip()}|{task.strip()}|{int(reset_step)}|"
+        f"{tenant_id.strip()}|{agent_id.strip()}|{project_id.strip()}"
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -97,6 +117,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--task", default="", help="Optional new task goal.")
     parser.add_argument("--reset-step", action="store_true", default=True, help="Reset to step 1.")
     parser.add_argument("--no-reset-step", action="store_false", dest="reset_step")
+    parser.add_argument("--tenant-id", default="", help="Tenant namespace id (optional).")
+    parser.add_argument("--agent-id", default="", help="Agent namespace id (optional).")
+    parser.add_argument("--project-id", default="", help="Project namespace id (optional).")
     parser.add_argument("--kickstart-label", default="com.openclaw.dev-supervisor", help="launchd label.")
     parser.add_argument("--no-kickstart", action="store_true", help="Only write trigger file.")
     parser.add_argument(
@@ -123,19 +146,33 @@ def main() -> int:
 
     status_path = agent_dir / "STATUS.json"
     status = read_status(status_path)
+    tenant_id = normalize_identifier(args.tenant_id, str(status.get("tenant_id", "default")))
+    agent_id = normalize_identifier(args.agent_id, str(status.get("agent_id", "main")))
+    project_id = normalize_identifier(args.project_id, str(status.get("project_id", repo.name)))
+
     if status:
         status["state"] = "idle"
         status["needs_human"] = False
         status["human_question"] = ""
         status["last_error_sig"] = "triggered"
         status["last_action"] = "triggered_run"
+        status["tenant_id"] = tenant_id
+        status["agent_id"] = agent_id
+        status["project_id"] = project_id
         if args.reset_step:
             status["current_step"] = 1
             status["checkpoint_id"] = ""
         write_status(status_path, status)
 
     trigger_path = agent_dir / TRIGGER_FILE
-    fingerprint = trigger_fingerprint(args.reason, args.task, bool(args.reset_step))
+    fingerprint = trigger_fingerprint(
+        args.reason,
+        args.task,
+        bool(args.reset_step),
+        tenant_id,
+        agent_id,
+        project_id,
+    )
     if should_skip_duplicate(trigger_path, fingerprint, max(0, args.dedup_seconds)):
         print("trigger: skipped duplicate request in dedup window")
         return 0
@@ -147,6 +184,9 @@ def main() -> int:
         "reason": args.reason,
         "task": args.task,
         "reset_step": bool(args.reset_step),
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "project_id": project_id,
         "fingerprint": fingerprint,
     }
     trigger_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

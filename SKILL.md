@@ -75,7 +75,7 @@ For these sync steps, supervisor also bypasses the Codex no-progress fallback pa
 
 ### 4.1) Event-driven immediate trigger
 ```bash
-python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary" --dedup-seconds 90
+python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary" --tenant-id default --agent-id assistant-main --project-id your-repo --dedup-seconds 90
 ```
 This writes `agent/TRIGGER.json`, optionally updates `agent/TASK.md`, and kickstarts launchd.
 
@@ -103,14 +103,26 @@ Requires `gh` CLI auth.
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "max_chars": 1800
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "strict_isolation": true,
+      "allow_cross_project": false
     }
   }
 }
 ```
 When enabled, Codex receives compact key lines from Daily/Session memory with bounded chars.
+
+### 4.4) Namespace bootstrap (recommended)
+```bash
+python3 scripts/memory_namespace.py --root .. --tenant-id default --agent-id assistant-main --project-id your-repo init
+```
+Use `resolve` subcommand to inspect paths without writes.
 
 ### 5) Handle blocked decisions
 If `agent/STATUS.json` is `blocked`, answer the item in `agent/DECISIONS.md`, then resume.
@@ -133,6 +145,7 @@ Completion requires:
 - `scripts/init_openclaw_dev.py` — create agent/ files + templates.
 - `scripts/supervisor_loop.py` — resume Codex, run tests, update status.
 - `scripts/trigger_supervisor.py` — event-trigger run and optionally reset current step.
+- `scripts/memory_namespace.py` — namespace resolver/bootstrap for isolated memory directories.
 - `scripts/autopr.py` — automated branch/commit/PR/auto-merge helper.
 
 ## References

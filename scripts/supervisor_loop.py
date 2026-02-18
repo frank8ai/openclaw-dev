@@ -30,12 +30,29 @@ DEFAULT_QA_RETRY_SLEEP = 5
 SECOND_BRAIN_DEFAULTS = {
     "enabled": False,
     "root": ".",
+    "memory_template": "MEMORY.md",
     "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
     "session_glob_template": "90_Memory/{date}/session_*.md",
     "include_memory_md": True,
     "max_chars": 1800,
     "max_sessions": 1,
     "max_lines_per_file": 40,
+}
+MEMORY_NAMESPACE_DEFAULTS = {
+    "enabled": True,
+    "root": "..",
+    "tenant_id": "default",
+    "default_agent_id": "main",
+    "default_project_id": "default",
+    "strict_isolation": True,
+    "allow_cross_project": False,
+    "global_memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+    "daily_index_template": (
+        "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md"
+    ),
+    "session_glob_template": (
+        "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
+    ),
 }
 
 
@@ -153,12 +170,16 @@ def apply_trigger(repo: Path, agent_dir: Path, status_path: Path, payload: dict)
     if isinstance(reason, str) and reason.strip():
         status["trigger_reason"] = reason.strip()
 
+    status["tenant_id"] = _normalize_identifier(payload.get("tenant_id"), str(status.get("tenant_id", "default")))
+    status["agent_id"] = _normalize_identifier(payload.get("agent_id"), str(status.get("agent_id", "main")))
+    status["project_id"] = _normalize_identifier(payload.get("project_id"), str(status.get("project_id", "default")))
+
     save_status(status_path, status)
     append_nightly_log(repo, "triggered", diff_written=False, scope_used=DEFAULT_SCOPE)
     return status
 
 
-def build_prompt(step: dict | None, second_brain_context: str = "") -> str:
+def build_prompt(step: dict | None, second_brain_context: str = "", namespace: dict | None = None) -> str:
     # Keep the prompt short and force file-based outputs to minimize token usage.
     step_desc = ""
     if step:
@@ -169,6 +190,16 @@ def build_prompt(step: dict | None, second_brain_context: str = "") -> str:
             "Second-brain context (authoritative, compact, read-only):\n"
             f"{second_brain_context}\n"
         )
+    namespace_desc = ""
+    if isinstance(namespace, dict):
+        tenant_id = str(namespace.get("tenant_id", "default"))
+        agent_id = str(namespace.get("agent_id", "main"))
+        project_id = str(namespace.get("project_id", "default"))
+        namespace_desc = (
+            "Namespace isolation is strict by default. "
+            f"Use only memory under tenant={tenant_id}, agent={agent_id}, project={project_id}. "
+            "Do not mix decisions from other projects unless explicitly imported.\n"
+        )
     return (
         "Operate in-repo with minimal tokens. "
         "First write a concrete 3-6 step plan to agent/PLAN.md, then execute immediately. "
@@ -177,7 +208,7 @@ def build_prompt(step: dict | None, second_brain_context: str = "") -> str:
         "Never paste long logs, only tail summaries to files. "
         "If human decision needed, write DECISIONS.md and set STATUS=blocked. "
         "Gate: QA_CMD pass (fallback TEST_CMD). On pass, write RESULT.md and set STATUS=done. "
-        f"{step_desc}{context_desc}"
+        f"{step_desc}{namespace_desc}{context_desc}"
     )
 
 
@@ -199,8 +230,9 @@ def run_codex_start(
     step: dict | None,
     add_dirs: list[str],
     second_brain_context: str,
+    namespace: dict,
 ) -> int:
-    prompt = build_prompt(step, second_brain_context=second_brain_context)
+    prompt = build_prompt(step, second_brain_context=second_brain_context, namespace=namespace)
     cmd = ["codex", "exec"]
     if full_auto:
         cmd.append("--full-auto")
@@ -210,9 +242,15 @@ def run_codex_start(
     return run_cmd(cmd, agent_dir.parent, timeout_s=timeout_s)
 
 
-def run_codex_resume(agent_dir: Path, timeout_s: int, step: dict | None, second_brain_context: str) -> int:
+def run_codex_resume(
+    agent_dir: Path,
+    timeout_s: int,
+    step: dict | None,
+    second_brain_context: str,
+    namespace: dict,
+) -> int:
     # Resume the most recent Codex exec run for this repo.
-    prompt = build_prompt(step, second_brain_context=second_brain_context)
+    prompt = build_prompt(step, second_brain_context=second_brain_context, namespace=namespace)
     cmd = [
         "codex",
         "exec",
@@ -346,6 +384,61 @@ def resolve_qa_settings(
     return max(0, retries), max(0, retry_sleep)
 
 
+def _normalize_identifier(value: object, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return fallback
+    return re.sub(r"[^a-z0-9._-]+", "-", cleaned)
+
+
+def resolve_memory_namespace_config(repo: Path) -> dict:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    raw: dict = {}
+    if isinstance(supervisor, dict):
+        candidate = supervisor.get("memory_namespace")
+        if isinstance(candidate, dict):
+            raw = candidate
+
+    merged = dict(MEMORY_NAMESPACE_DEFAULTS)
+    merged.update(raw)
+    merged["enabled"] = bool(merged.get("enabled", True))
+    merged["strict_isolation"] = bool(merged.get("strict_isolation", True))
+    merged["allow_cross_project"] = bool(merged.get("allow_cross_project", False))
+    merged["tenant_id"] = _normalize_identifier(merged.get("tenant_id"), "default")
+    merged["default_agent_id"] = _normalize_identifier(merged.get("default_agent_id"), "main")
+    merged["default_project_id"] = _normalize_identifier(merged.get("default_project_id"), "default")
+    if not isinstance(merged.get("root"), str):
+        merged["root"] = ".."
+    return merged
+
+
+def resolve_runtime_namespace(status: dict, namespace_config: dict) -> dict:
+    tenant_id = _normalize_identifier(status.get("tenant_id"), str(namespace_config.get("tenant_id", "default")))
+    agent_id = _normalize_identifier(
+        status.get("agent_id"),
+        str(namespace_config.get("default_agent_id", "main")),
+    )
+    project_id = _normalize_identifier(
+        status.get("project_id"),
+        str(namespace_config.get("default_project_id", "default")),
+    )
+    return {
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "project_id": project_id,
+    }
+
+
+def apply_namespace_to_status(status: dict, namespace: dict) -> dict:
+    status["tenant_id"] = namespace.get("tenant_id", "default")
+    status["agent_id"] = namespace.get("agent_id", "main")
+    status["project_id"] = namespace.get("project_id", "default")
+    return status
+
+
 def _safe_read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
@@ -383,24 +476,44 @@ def _extract_priority_lines(text: str, max_lines: int) -> str:
     return "\n".join(selected[:max_lines])
 
 
-def _resolve_second_brain_paths(
-    repo: Path,
-    config: dict,
-) -> tuple[Path, Path, list[Path], int, bool]:
-    root_raw = config.get("root", ".")
+def _format_template(template: str, namespace: dict) -> str:
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    payload = {
+        "date": date_str,
+        "tenant_id": namespace.get("tenant_id", "default"),
+        "agent_id": namespace.get("agent_id", "main"),
+        "project_id": namespace.get("project_id", "default"),
+    }
+    try:
+        return template.format(**payload)
+    except KeyError:
+        return template.format(date=date_str)
+
+
+def _resolve_root(repo: Path, root_raw: object) -> Path:
     root = Path(str(root_raw)).expanduser()
     if not root.is_absolute():
         root = (repo / root).resolve()
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    return root
+
+
+def _resolve_second_brain_paths(
+    repo: Path,
+    config: dict,
+) -> tuple[Path, Path, list[Path], Path, bool]:
+    namespace = config.get("_namespace", {})
+    root = _resolve_root(repo, config.get("root", "."))
 
     daily_template = str(config.get("daily_index_template", SECOND_BRAIN_DEFAULTS["daily_index_template"]))
     session_template = str(config.get("session_glob_template", SECOND_BRAIN_DEFAULTS["session_glob_template"]))
+    memory_template = str(config.get("memory_template", SECOND_BRAIN_DEFAULTS["memory_template"]))
     include_memory_md = bool(config.get("include_memory_md", True))
     max_sessions_raw = config.get("max_sessions", 1)
     max_sessions = max(1, int(max_sessions_raw)) if isinstance(max_sessions_raw, int) else 1
 
-    daily_rel = daily_template.format(date=date_str)
-    session_rel = session_template.format(date=date_str)
+    daily_rel = _format_template(daily_template, namespace)
+    session_rel = _format_template(session_template, namespace)
+    memory_rel = _format_template(memory_template, namespace)
     daily_path = (root / daily_rel).resolve()
 
     session_matches = sorted(
@@ -409,8 +522,8 @@ def _resolve_second_brain_paths(
         reverse=True,
     )
     session_paths = session_matches[:max_sessions]
-
-    return root, daily_path, session_paths, max_sessions, include_memory_md
+    memory_path = (root / memory_rel).resolve()
+    return root, daily_path, session_paths, memory_path, include_memory_md
 
 
 def resolve_second_brain_config(repo: Path) -> dict:
@@ -442,20 +555,36 @@ def resolve_second_brain_config(repo: Path) -> dict:
     return merged
 
 
-def build_second_brain_context(repo: Path, config: dict) -> str:
+def build_second_brain_context(repo: Path, config: dict, namespace: dict) -> str:
     if not bool(config.get("enabled", False)):
         return ""
 
-    _, daily_path, session_paths, _, include_memory_md = _resolve_second_brain_paths(repo, config)
+    effective = dict(config)
+    effective["_namespace"] = dict(namespace)
+    if bool(config.get("_namespace_enabled", False)):
+        effective["root"] = str(_resolve_root(repo, config.get("_namespace_root", "..")))
+        effective["daily_index_template"] = str(
+            config.get("_namespace_daily_template", MEMORY_NAMESPACE_DEFAULTS["daily_index_template"])
+        )
+        effective["session_glob_template"] = str(
+            config.get("_namespace_session_template", MEMORY_NAMESPACE_DEFAULTS["session_glob_template"])
+        )
+        effective["memory_template"] = str(
+            config.get("_namespace_memory_template", MEMORY_NAMESPACE_DEFAULTS["global_memory_template"])
+        )
+
+    _, daily_path, session_paths, memory_md, include_memory_md = _resolve_second_brain_paths(repo, effective)
     max_chars = int(config.get("max_chars", 1800))
     max_lines_per_file = int(config.get("max_lines_per_file", 40))
     sections: list[str] = []
+    sections.append(
+        "[NAMESPACE]\n"
+        f"tenant_id={namespace.get('tenant_id','default')} "
+        f"agent_id={namespace.get('agent_id','main')} "
+        f"project_id={namespace.get('project_id','default')}"
+    )
 
     if include_memory_md:
-        memory_path = (Path(str(config.get("root", "."))).expanduser())
-        if not memory_path.is_absolute():
-            memory_path = (repo / memory_path).resolve()
-        memory_md = memory_path / "MEMORY.md"
         memory_text = _safe_read_text(memory_md)
         memory_excerpt = _extract_priority_lines(memory_text, max_lines=12)
         if memory_excerpt:
@@ -866,6 +995,23 @@ def loop(
     sync_target = resolve_sync_target(add_dirs)
     autopr = load_autopr_config(repo)
     second_brain_config = resolve_second_brain_config(repo)
+    memory_namespace_config = resolve_memory_namespace_config(repo)
+    second_brain_config["_namespace_enabled"] = bool(
+        memory_namespace_config.get("enabled", True) and memory_namespace_config.get("strict_isolation", True)
+    )
+    second_brain_config["_namespace_root"] = memory_namespace_config.get("root", "..")
+    second_brain_config["_namespace_memory_template"] = memory_namespace_config.get(
+        "global_memory_template",
+        MEMORY_NAMESPACE_DEFAULTS["global_memory_template"],
+    )
+    second_brain_config["_namespace_daily_template"] = memory_namespace_config.get(
+        "daily_index_template",
+        MEMORY_NAMESPACE_DEFAULTS["daily_index_template"],
+    )
+    second_brain_config["_namespace_session_template"] = memory_namespace_config.get(
+        "session_glob_template",
+        MEMORY_NAMESPACE_DEFAULTS["session_glob_template"],
+    )
     primary_codex_dir = str((Path.home() / ".codex").resolve())
     has_external_add_dirs = any(Path(path).resolve() != Path(primary_codex_dir).resolve() for path in add_dirs)
     if not agent_dir.exists():
@@ -879,6 +1025,14 @@ def loop(
         trigger = load_trigger_payload(agent_dir)
         if trigger:
             status = apply_trigger(repo, agent_dir, status_path, trigger)
+        runtime_namespace = resolve_runtime_namespace(status, memory_namespace_config)
+        if (
+            status.get("tenant_id") != runtime_namespace.get("tenant_id")
+            or status.get("agent_id") != runtime_namespace.get("agent_id")
+            or status.get("project_id") != runtime_namespace.get("project_id")
+        ):
+            status = apply_namespace_to_status(status, runtime_namespace)
+            save_status(status_path, status)
         state = status.get("state", "idle")
 
         if state in ("done", "blocked"):
@@ -955,7 +1109,7 @@ def loop(
         result_path = agent_dir / "RESULT.md"
         plan_before = plan_path.stat().st_mtime if plan_path.exists() else 0
         result_before = result_path.stat().st_mtime if result_path.exists() else 0
-        second_brain_context = build_second_brain_context(repo, second_brain_config)
+        second_brain_context = build_second_brain_context(repo, second_brain_config, runtime_namespace)
 
         if host_sync_step:
             codex_rc = run_host_sync(repo, sync_target or "", agent_dir, timeout_s=min(codex_timeout, 300))
@@ -967,6 +1121,7 @@ def loop(
                 step=step,
                 add_dirs=add_dirs,
                 second_brain_context=second_brain_context,
+                namespace=runtime_namespace,
             )
         else:
             codex_rc = run_codex_resume(
@@ -974,6 +1129,7 @@ def loop(
                 timeout_s=codex_timeout,
                 step=step,
                 second_brain_context=second_brain_context,
+                namespace=runtime_namespace,
             )
         attempts += 1
 

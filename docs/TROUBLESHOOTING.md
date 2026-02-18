@@ -26,3 +26,12 @@ Cause: older supervisor logic could route sync-only runs into Codex fallback beh
 Fix:
 - Upgrade to the latest `scripts/supervisor_loop.py` in this repo.
 - Ensure sync step objective includes `sync` + `skill` so supervisor uses host sync path.
+
+## Memory context appears mixed across projects
+Cause: namespace IDs are missing or inconsistent between trigger, status, and config defaults.
+
+Fix:
+- Run trigger with explicit `--tenant-id --agent-id --project-id`.
+- Ensure `agent/STATUS.json` contains namespace keys.
+- Verify `openclaw.json` -> `supervisor.memory_namespace.strict_isolation=true`.
+- Use `python3 scripts/memory_namespace.py ... resolve` to confirm effective paths.

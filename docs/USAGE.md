@@ -118,7 +118,10 @@ When a new task arrives, trigger an immediate run instead of waiting for interva
 python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
-  --task "Implement feature X"
+  --task "Implement feature X" \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo
 ```
 By default it also runs `launchctl kickstart` on `com.openclaw.dev-supervisor`.
 To avoid duplicate triggers, the command deduplicates identical payloads in a short window
@@ -153,17 +156,46 @@ Enable in `openclaw.json`:
     "second_brain": {
       "enabled": true,
       "root": "..",
-      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
-      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "memory_template": "brain/tenants/{tenant_id}/global/MEMORY.md",
+      "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md",
       "include_memory_md": true,
       "max_chars": 1800,
       "max_sessions": 1,
       "max_lines_per_file": 40
+    },
+    "memory_namespace": {
+      "enabled": true,
+      "tenant_id": "default",
+      "default_agent_id": "main",
+      "default_project_id": "your-repo",
+      "strict_isolation": true,
+      "allow_cross_project": false
     }
   }
 }
 ```
 When enabled, supervisor injects compact key lines from daily/session memory into Codex prompts.
+
+## 3.8) Bootstrap memory namespace directories
+Create tenant/agent/project memory skeleton:
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo \
+  init
+```
+Inspect only (no writes):
+```bash
+python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
+  --root .. \
+  --tenant-id default \
+  --agent-id assistant-main \
+  --project-id your-repo \
+  resolve
+```
 
 ## 4) Handle decisions
 When `agent/STATUS.json.state = blocked`, check `agent/DECISIONS.md` and answer the questions, then resume:

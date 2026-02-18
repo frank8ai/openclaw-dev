@@ -16,6 +16,7 @@
 - `agent/BLUEPRINT.json`: 确定性步骤
 - `agent/HOT.md` / `agent/WARM.md`: 精简上下文缓存
 - `docs/QUALITY_GATES.md`: 质量门禁策略、阈值和停止条件
+- `docs/MEMORY_NAMESPACE_SOP.md`: 多代理/多项目记忆隔离策略（命名空间）
 
 ## 状态流转
 - `idle` -> `running`: 开始执行
@@ -39,7 +40,9 @@
 
 ## 上下文策略（低 token）
 - 默认使用 HOT/WARM + 错误尾部摘要。
-- 可选开启 `supervisor.second_brain`，注入 `MEMORY.md`、Daily Index、最新 Session Slice 的压缩关键信息。
+- 可选开启 `supervisor.second_brain`，按 `tenant/agent/project` 命名空间注入压缩上下文。
+- 命名空间标识保存在 `agent/STATUS.json`：`tenant_id`、`agent_id`、`project_id`。
+- 默认严格隔离：不跨项目自动读取记忆，跨项目必须显式导入。
 - 触发器默认带去重窗口，避免同任务短时间重复空转。
 
 ## 可选发布自动化

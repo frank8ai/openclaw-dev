@@ -26,3 +26,12 @@
 处理方式：
 - 升级到当前仓库最新版 `scripts/supervisor_loop.py`
 - 确保该步骤 objective 同时包含 `sync` 与 `skill`，让 supervisor 走 host sync 路径
+
+## 不同项目的记忆出现串线
+原因：trigger/status/config 的命名空间参数不一致，导致路径解析偏移。
+
+处理方式：
+- 触发任务时显式传 `--tenant-id --agent-id --project-id`
+- 确认 `agent/STATUS.json` 中存在并正确写入命名空间字段
+- 确认 `openclaw.json` 的 `supervisor.memory_namespace.strict_isolation=true`
+- 用 `python3 scripts/memory_namespace.py ... resolve` 检查实际路径

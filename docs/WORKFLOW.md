@@ -16,6 +16,7 @@
 - `agent/BLUEPRINT.json`: deterministic steps (model does not decide flow)
 - `agent/HOT.md` / `agent/WARM.md`: minimal context buffers
 - `docs/QUALITY_GATES.md`: gate policy, thresholds, and stop rules
+- `docs/MEMORY_NAMESPACE_SOP.md`: namespace isolation policy for multi-agent and multi-project memory
 
 ## State transitions
 - `idle` → `running`: when Codex starts
@@ -40,7 +41,9 @@
 
 ## Context strategy (token-optimized)
 - Default: HOT/WARM + tail summaries.
-- Optional: `supervisor.second_brain` injects compact lines from `MEMORY.md`, daily index, and latest session slice.
+- Optional: `supervisor.second_brain` injects compact lines from namespaced memory (`tenant/agent/project`).
+- Namespace IDs live in `agent/STATUS.json`: `tenant_id`, `agent_id`, `project_id`.
+- Strict isolation default: no implicit cross-project memory read unless explicitly imported.
 - Trigger dedup avoids repeated identical runs in a short window.
 
 ## Optional release automation

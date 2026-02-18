@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.0
+- Add strict tenant/agent/project memory namespace support in supervisor context loading.
+- Add namespace metadata propagation through trigger payload and runtime status (`tenant_id`, `agent_id`, `project_id`).
+- Add `scripts/memory_namespace.py` with `init`/`resolve` commands for namespace directory bootstrap.
+- Add namespace isolation tests for supervisor context and trigger fingerprint dedup.
+- Add `docs/MEMORY_NAMESPACE_SOP.md` and update usage/workflow docs for multi-subagent memory isolation.
+
 ## 2.3.0
 - Add optional second-brain compact context injection from `MEMORY.md` + daily index + latest session slice.
 - Add trigger dedup window in `scripts/trigger_supervisor.py` to avoid repeated identical runs.
