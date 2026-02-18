@@ -7,8 +7,8 @@
       "../skills/openclaw-dev"
     ],
     "second_brain": {
-      "enabled": false,
-      "root": ".",
+      "enabled": true,
+      "root": "..",
       "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
       "session_glob_template": "90_Memory/{date}/session_*.md",
       "include_memory_md": true,
