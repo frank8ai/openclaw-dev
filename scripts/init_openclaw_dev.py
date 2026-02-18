@@ -9,30 +9,24 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+COMMANDS_ENV = """CHECKPOINT_MODE='patch'
 
-COMMANDS_ENV = """export NEXUS_PYTHON_PATH="$HOME/.openclaw/workspace/skills/deepsea-nexus/.venv-3.13/bin/python"
-
-CHECKPOINT_MODE='patch'
-
-TEST_CMD='
-if [ -f pnpm-lock.yaml ]; then pnpm -s test;
-elif [ -f package-lock.json ]; then npm test;
-elif [ -f yarn.lock ]; then yarn test;
-elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then pytest -q;
-elif ls scripts/*.py >/dev/null 2>&1; then python3 -m py_compile scripts/*.py;
-else echo "no tests"; fi
-'
-
-LINT_CMD='if [ -f package.json ]; then (pnpm -s lint || npm run lint || yarn lint); fi'
-TYPECHECK_CMD='if [ -f tsconfig.json ]; then (pnpm -s typecheck || npm run typecheck || yarn typecheck); fi'
-BUILD_CMD='if [ -f package.json ]; then (pnpm -s build || npm run build || yarn build); fi'
+SETUP_CMD='bash scripts/qa/bootstrap.sh setup'
+LINT_CMD='bash scripts/qa/bootstrap.sh lint'
+TYPECHECK_CMD='bash scripts/qa/bootstrap.sh typecheck'
+TEST_CMD='bash scripts/qa/bootstrap.sh tests'
+EVAL_CMD='bash scripts/qa/bootstrap.sh eval'
+SECURITY_CMD='bash scripts/qa/bootstrap.sh security'
+REVIEW_CMD='bash scripts/qa/bootstrap.sh review'
+QA_CMD='bash scripts/qa/bootstrap.sh all'
+BUILD_CMD='echo "build step not required for this repository"'
 """
 
 
-POLICY_MD = """目标：在保证测试通过的前提下，最小改动、最低 token、可恢复。
+POLICY_MD = """目标：在保证质量门禁通过的前提下，最小改动、最低 token、可恢复。
 
 硬规则：
-- 每轮修改后必须运行 TEST_CMD。
+- 每轮修改后必须运行 QA_CMD（至少 LINT/TYPECHECK/TEST/EVAL/SECURITY/REVIEW）。
 - 禁止新增依赖；若必须新增，写入 DECISIONS.md 并 blocked。
 - 不做大重构；每次只完成一个里程碑。
 - 终端输出只保留错误段 + 最后 150 行。

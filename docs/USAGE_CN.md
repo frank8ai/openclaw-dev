@@ -72,3 +72,17 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --repo /path/to/your-repo \
   --run-once --full-auto
 ```
+
+## 5) 本地执行质量门禁
+```bash
+make qa
+```
+或按门禁单独执行：
+```bash
+make lint
+make typecheck
+make test
+make eval
+make security
+make review
+```

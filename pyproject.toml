@@ -1,0 +1,32 @@
+[project]
+name = "openclaw-dev"
+version = "2.1.0"
+description = "OpenClaw + Codex autonomous development supervisor."
+requires-python = ">=3.8"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+src = ["scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.8"
+files = ["scripts"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+pretty = true

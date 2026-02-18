@@ -3,7 +3,7 @@
 ## 目标
 - 按规格执行（spec-driven）
 - 低 token 监督
-- 测试门禁验收
+- 质量门禁验收
 - 状态文件可追踪
 
 ## 核心文件
@@ -14,11 +14,12 @@
 - `agent/RESULT.md`: 最终交付摘要
 - `agent/BLUEPRINT.json`: 确定性步骤
 - `agent/HOT.md` / `agent/WARM.md`: 精简上下文缓存
+- `docs/QUALITY_GATES.md`: 质量门禁策略、阈值和停止条件
 
 ## 状态流转
 - `idle` -> `running`: 开始执行
 - `running` -> `blocked`: 执行失败或等待人工决策
-- `running` -> `done`: 测试通过且结果写完整
+- `running` -> `done`: 质量门禁通过且结果写完整
 - `running` -> `idle`: 一轮完成但未最终收敛
 
 ## 低 token 纪律

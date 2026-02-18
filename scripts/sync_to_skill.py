@@ -8,12 +8,10 @@ from __future__ import annotations
 import argparse
 import filecmp
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-
 
 DEFAULT_EXCLUDE_PREFIXES = (
     ".git/",

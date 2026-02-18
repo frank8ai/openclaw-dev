@@ -27,7 +27,8 @@ DEFAULT_SCOPE = "."
 def load_status(path: Path) -> dict:
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else {}
 
 
 def save_status(path: Path, status: dict) -> None:
@@ -51,7 +52,11 @@ def run_tests(agent_dir: Path) -> int:
     cmd = [
         "bash",
         "-lc",
-        'source agent/COMMANDS.env && eval "$TEST_CMD" 2>&1 | tail -n 150 > agent/test_tail.log',
+        (
+            "set -o pipefail && source agent/COMMANDS.env && "
+            '{ if [ -n "${QA_CMD:-}" ]; then eval "$QA_CMD"; else eval "$TEST_CMD"; fi; } '
+            "2>&1 | tail -n 150 > agent/test_tail.log"
+        ),
     ]
     return run_cmd(cmd, agent_dir.parent)
 
@@ -62,11 +67,15 @@ def build_prompt(step: dict | None) -> str:
     if step:
         step_desc = f"Current step: {step.get('name')} — {step.get('objective')}. "
     return (
-        "You are running inside a repo. First, write a concrete 3-6 step plan to agent/PLAN.md and then immediately start executing it. "
-        "Rules: follow agent/POLICY.md and agent/TASK.md; read agent/COMMANDS.env for TEST_CMD/LINT_CMD/TYPECHECK_CMD/BUILD_CMD. "
-        "Update agent/HOT.md every run and agent/WARM.md on milestone completion; keep within agent/CONTEXT.json budgets. "
+        "You are running inside a repo. First, write a concrete 3-6 step plan to agent/PLAN.md "
+        "and then immediately start executing it. "
+        "Rules: follow agent/POLICY.md and agent/TASK.md; read agent/COMMANDS.env for "
+        "QA_CMD/TEST_CMD/LINT_CMD/TYPECHECK_CMD/EVAL_CMD/SECURITY_CMD/REVIEW_CMD. "
+        "Update agent/HOT.md every run and agent/WARM.md on milestone completion; keep within "
+        "agent/CONTEXT.json budgets. "
         "Update agent/STATUS.json after each step. Do NOT paste large logs; write only tail summaries. "
-        "When acceptance passes (TEST_CMD), write agent/RESULT.md (files changed, git diff --stat, verification, risks) and set STATUS.state=done. "
+        "When acceptance passes (QA_CMD, fallback TEST_CMD), write agent/RESULT.md "
+        "(files changed, git diff --stat, verification, risks) and set STATUS.state=done. "
         "If you need a human decision, write agent/DECISIONS.md and set STATUS.state=blocked. "
         f"{step_desc}"
     )
@@ -75,8 +84,10 @@ def build_prompt(step: dict | None) -> str:
 def _force_write_files_prompt() -> str:
     # Second-chance prompt when Codex gets stuck inspecting. Force a concrete write to PLAN.
     return (
-        "Use the shell to overwrite agent/PLAN.md with a concrete numbered plan (3-6 steps) that matches agent/TASK.md. "
-        "After writing PLAN.md, update agent/HOT.md and agent/STATUS.json (state=running, last_action='wrote plan'), then exit. "
+        "Use the shell to overwrite agent/PLAN.md with a concrete numbered plan (3-6 steps) "
+        "that matches agent/TASK.md. "
+        "After writing PLAN.md, update agent/HOT.md and agent/STATUS.json "
+        "(state=running, last_action='wrote plan'), then exit. "
         "Do not print large logs."
     )
 
@@ -132,6 +143,8 @@ def load_blueprint(agent_dir: Path) -> dict:
 
 def get_step(blueprint: dict, current_step: int) -> dict | None:
     for step in blueprint.get("steps", []):
+        if not isinstance(step, dict):
+            continue
         if step.get("id") == current_step:
             return step
     return None
@@ -140,8 +153,9 @@ def get_step(blueprint: dict, current_step: int) -> dict | None:
 def step_requires_test(step: dict | None) -> bool:
     if not step:
         return True
-    if isinstance(step.get("requires_test"), bool):
-        return step["requires_test"]
+    requires_test = step.get("requires_test")
+    if isinstance(requires_test, bool):
+        return requires_test
     return step.get("name") in ("verify", "finalize")
 
 
@@ -436,9 +450,11 @@ def record_check_result(
 ) -> None:
     verification_parts = []
     if test_rc is None:
-        verification_parts.append("TEST_CMD: 未执行")
+        verification_parts.append("QA_CMD/TEST_CMD: 未执行")
     else:
-        verification_parts.append("TEST_CMD: OK" if test_rc == 0 else f"TEST_CMD: FAILED(exit={test_rc})")
+        verification_parts.append(
+            "QA_CMD/TEST_CMD: OK" if test_rc == 0 else f"QA_CMD/TEST_CMD: FAILED(exit={test_rc})"
+        )
 
     workspace_test_summary, workspace_test_ok = run_workspace_tests(repo, agent_dir)
     verification_parts.append(workspace_test_summary)
@@ -460,7 +476,12 @@ def record_check_result(
 
     final_status_parts = [part for part in status_parts if part]
     final_status_parts.append("run_tests_ok" if workspace_test_ok else "run_tests_failed")
-    append_nightly_log(repo, ",".join(final_status_parts) if final_status_parts else "unknown", diff_written, scope_used)
+    append_nightly_log(
+        repo,
+        ",".join(final_status_parts) if final_status_parts else "unknown",
+        diff_written,
+        scope_used,
+    )
 
 
 def loop(
@@ -732,12 +753,12 @@ def loop(
             save_status(status_path, status)
 
         if test_rc == 0:
-            completion = "巡检完成：codex 执行成功，TEST_CMD 通过。"
+            completion = "巡检完成：codex 执行成功，质量门禁通过。"
             risks = "无"
             status_parts = ["codex_ok", "tests_ok"]
         else:
-            completion = "巡检完成：codex 执行成功，但 TEST_CMD 未通过。"
-            risks = "TEST_CMD 未通过，需继续修复。"
+            completion = "巡检完成：codex 执行成功，但质量门禁未通过。"
+            risks = "QA_CMD/TEST_CMD 未通过，需继续修复。"
             status_parts = ["codex_ok", "tests_failed"]
 
         record_check_result(
@@ -761,11 +782,21 @@ def main() -> None:
     parser.add_argument("--repo", required=True, help="Repo root")
     parser.add_argument("--interval", type=int, default=1800)
     parser.add_argument("--run-once", action="store_true")
-    parser.add_argument("--max-attempts", type=int, default=12, help="Max Codex attempts before marking blocked.")
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=12,
+        help="Max Codex attempts before marking blocked.",
+    )
     parser.add_argument("--attempt-sleep", type=int, default=20, help="Seconds to sleep between retries.")
     parser.add_argument("--full-auto", action="store_true")
     parser.add_argument("--start", action="store_true", help="Force a fresh codex exec")
-    parser.add_argument("--codex-timeout", type=int, default=300, help="Timeout (seconds) for a single codex exec/resume call")
+    parser.add_argument(
+        "--codex-timeout",
+        type=int,
+        default=300,
+        help="Timeout (seconds) for a single codex exec/resume call",
+    )
     parser.add_argument(
         "--add-dir",
         action="append",

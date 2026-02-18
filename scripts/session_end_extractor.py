@@ -9,7 +9,6 @@ import os
 import re
 from typing import Iterable, List
 
-
 DEFAULT_INPUT = "agent/test_tail.log"
 DEFAULT_OUTPUT = "agent/session_ends.md"
 DEFAULT_MAX_LINES = 50
@@ -55,8 +54,9 @@ def summarize_signals(lines: Iterable[str]) -> List[str]:
         if not SIGNAL_PATTERN.search(line):
             continue
         compact = compact_line(line)
-        if compact and compact not in seen:
-            seen.add(compact)
+        normalized = compact.lower()
+        if compact and normalized not in seen:
+            seen.add(normalized)
             signals.append(compact)
     if not signals:
         signals.append("No error or warning signals detected in tail.")

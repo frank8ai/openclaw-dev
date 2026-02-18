@@ -1,6 +1,6 @@
 ---
 name: openclaw-dev
-description: Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven execution, minimal-token supervision, and test-gated acceptance. Use when you need to set up agent/ templates, run codex exec/resume loops, and manage STATUS/DECISIONS/RESULT files for autonomous project delivery.
+description: Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven execution, minimal-token supervision, and quality-gated acceptance. Use when you need to set up agent/ templates, run codex exec/resume loops, and manage STATUS/DECISIONS/RESULT files for autonomous project delivery.
 ---
 
 # OpenClaw Dev Supervisor
@@ -86,6 +86,7 @@ Completion requires:
 - No large logs in chat; write to files and only tail 150 lines.
 - All changes checkpointed with `diff --stat` in RESULT.
 - No new deps without DECISIONS approval.
+- Gate completion is `QA_CMD` pass (or `TEST_CMD` fallback for legacy repos).
 - Use `agent/STATUS.json` as the single source of truth.
 - Keep HOT/WARM small; cold context is reference only.
 

@@ -1,6 +1,6 @@
 # OpenClaw Dev（中文）
 
-OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可复用、低 token 成本、并由测试结果把关。
+OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可复用、低 token 成本，并由质量门禁把关。
 
 ## 仓库包含内容
 - `SKILL.md`: OpenClaw skill 入口定义。
@@ -58,6 +58,22 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 
 说明：当蓝图步骤目标同时包含 `sync` 与 `skill` 时，supervisor 会走 host sync 路径，并跳过 Codex 无进展兜底逻辑，避免无关改写 `agent/PLAN.md` / `agent/HOT.md`。
 
+## 质量门禁
+一键执行全部门禁：
+```bash
+make qa
+```
+按门禁单独执行：
+```bash
+make lint
+make typecheck
+make test
+make eval
+make security
+make review
+```
+策略与阈值见：`docs/QUALITY_GATES.md`
+
 ## 文档导航
 - 中文
 - `docs/USAGE_CN.md`
@@ -68,3 +84,4 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 - `docs/USAGE.md`
 - `docs/WORKFLOW.md`
 - `docs/TROUBLESHOOTING.md`
+- `docs/QUALITY_GATES.md`

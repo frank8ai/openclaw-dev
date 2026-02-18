@@ -1,7 +1,7 @@
-目标：在保证测试通过的前提下，最小改动、最低 token、可恢复。
+目标：在保证质量门禁通过的前提下，最小改动、最低 token、可恢复。
 
 硬规则：
-- 每轮修改后必须运行 TEST_CMD。
+- 每轮修改后必须运行 QA_CMD（至少 LINT/TYPECHECK/TEST/EVAL/SECURITY/REVIEW）。
 - 禁止新增依赖；若必须新增，写入 DECISIONS.md 并 blocked。
 - 不做大重构；每次只完成一个里程碑。
 - 终端输出只保留错误段 + 最后 150 行。

@@ -86,9 +86,10 @@ def parse_status(text: str) -> dict:
     if not text.strip():
         return {}
     try:
-        return json.loads(text)
+        payload = json.loads(text)
     except json.JSONDecodeError:
         return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def parse_blueprint(text: str) -> dict[int, dict]:

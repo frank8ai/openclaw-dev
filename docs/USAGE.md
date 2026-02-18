@@ -71,3 +71,17 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --repo /path/to/your-repo \
   --run-once --full-auto
 ```
+
+## 5) Run quality gates locally
+```bash
+make qa
+```
+Or run a single gate:
+```bash
+make lint
+make typecheck
+make test
+make eval
+make security
+make review
+```

@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .DS_Store
 agent/test_tail.log
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+bandit-report.json

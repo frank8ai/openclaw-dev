@@ -3,7 +3,7 @@
 ## Goals
 - Spec-driven execution
 - Minimal-token supervision
-- Test-gated acceptance
+- Quality-gated acceptance
 - Durable status files
 
 ## Core files
@@ -14,11 +14,13 @@
 - `agent/RESULT.md`: final delivery summary
 - `agent/BLUEPRINT.json`: deterministic steps (model does not decide flow)
 - `agent/HOT.md` / `agent/WARM.md`: minimal context buffers
+- `docs/QUALITY_GATES.md`: gate policy, thresholds, and stop rules
 
 ## State transitions
 - `idle` → `running`: when Codex starts
 - `running` → `blocked`: if Codex fails or needs approval
 - `running` → `done`: when tests pass and Result is complete
+  - practical definition: `QA_CMD` pass (or `TEST_CMD` fallback for legacy repos)
 - `running` → `idle`: when Codex finishes without errors but not yet done
 
 ## Minimal-token discipline

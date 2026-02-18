@@ -1,6 +1,6 @@
 # OpenClaw Dev
 
-Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven execution, minimal-token supervision, and test-gated acceptance.
+Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven execution, minimal-token supervision, and quality-gated acceptance.
 
 ## What this repo provides
 - `SKILL.md`: the skill entry point for OpenClaw.
@@ -65,6 +65,22 @@ In sync steps, supervisor skips Codex no-progress fallback, so it will not rewri
   - Output appends to `agent/session_ends.md`.
 - Pycache note: if `py_compile`/`__pycache__` churn appears, set `PYTHONPYCACHEPREFIX=/tmp/pycache`.
 
+## Quality gates (best-practice baseline)
+- Install and run all gates:
+```bash
+make qa
+```
+- Individual gates:
+```bash
+make lint
+make typecheck
+make test
+make eval
+make security
+make review
+```
+- Gate policy and thresholds: `docs/QUALITY_GATES.md`
+
 ## Version
 - `VERSION` file and Git tag `v2.0.0`.
 
@@ -77,6 +93,7 @@ In sync steps, supervisor skips Codex no-progress fallback, so it will not rewri
 - `docs/USAGE.md`
 - `docs/WORKFLOW.md`
 - `docs/TROUBLESHOOTING.md`
+- `docs/QUALITY_GATES.md`
 - Chinese
 - `README_CN.md`
 - `docs/USAGE_CN.md`
