@@ -38,6 +38,11 @@
 - QA failures can retry automatically (`--qa-retries`, `--qa-retry-sleep`) before marking failed.
 - Timeouts/no-progress are tracked in `STATUS.last_error_sig` and routed to blocked with clear actions.
 
+## Context strategy (token-optimized)
+- Default: HOT/WARM + tail summaries.
+- Optional: `supervisor.second_brain` injects compact lines from `MEMORY.md`, daily index, and latest session slice.
+- Trigger dedup avoids repeated identical runs in a short window.
+
 ## Optional release automation
 - Enable `supervisor.autopr` to create branch/commit/PR automatically after `STATUS=done` and gates pass.
 - `mode=dev` allows `auto_merge`; `staging/prod` should keep manual approval.

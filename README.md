@@ -12,6 +12,7 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `scripts/sync_to_skill.py`: host-side sync from repo to local skill copy.
 - `references/agent_templates.md`: canonical templates for `agent/` files.
 - Deterministic `agent/BLUEPRINT.json` and minimal-context `agent/HOT.md`/`agent/WARM.md`.
+- Optional second-brain context injection (Daily Index + Session Slice) for lower-token long runs.
 
 ## Quickstart
 1) Initialize `agent/` templates in your target repo
@@ -88,6 +89,22 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
 ```
 Requires `gh` CLI and authenticated GitHub session.
 
+8) Optional second-brain compact context injection:
+```json
+{
+  "supervisor": {
+    "second_brain": {
+      "enabled": true,
+      "root": "..",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "max_chars": 1800
+    }
+  }
+}
+```
+This keeps prompt context compact while preserving key decisions and active session intent.
+
 ## Iter-2 utilities
 - `scripts/para_recall.py`: lightweight memory recall over `memory/`.
   - Example: `python3 scripts/para_recall.py --query "focus areas" --trace logs/retrieval_trace.jsonl`
@@ -114,7 +131,7 @@ make review
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 
 ## Version
-- `VERSION` file and Git tag `v2.2.0`.
+- `VERSION` file and Git tag `v2.3.0`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.

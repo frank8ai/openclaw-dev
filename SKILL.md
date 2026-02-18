@@ -75,7 +75,7 @@ For these sync steps, supervisor also bypasses the Codex no-progress fallback pa
 
 ### 4.1) Event-driven immediate trigger
 ```bash
-python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary"
+python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary" --dedup-seconds 90
 ```
 This writes `agent/TRIGGER.json`, optionally updates `agent/TASK.md`, and kickstarts launchd.
 
@@ -95,6 +95,22 @@ Configure in `openclaw.json`:
 }
 ```
 Requires `gh` CLI auth.
+
+### 4.3) Optional second-brain compact context
+```json
+{
+  "supervisor": {
+    "second_brain": {
+      "enabled": true,
+      "root": "..",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "max_chars": 1800
+    }
+  }
+}
+```
+When enabled, Codex receives compact key lines from Daily/Session memory with bounded chars.
 
 ### 5) Handle blocked decisions
 If `agent/STATUS.json` is `blocked`, answer the item in `agent/DECISIONS.md`, then resume.

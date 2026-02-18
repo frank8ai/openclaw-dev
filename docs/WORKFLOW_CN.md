@@ -37,6 +37,11 @@
 - 质量门禁失败可自动重试（`--qa-retries`、`--qa-retry-sleep`）后再判定失败。
 - 超时/无进展会写入 `STATUS.last_error_sig`，并给出明确 blocked 处理动作。
 
+## 上下文策略（低 token）
+- 默认使用 HOT/WARM + 错误尾部摘要。
+- 可选开启 `supervisor.second_brain`，注入 `MEMORY.md`、Daily Index、最新 Session Slice 的压缩关键信息。
+- 触发器默认带去重窗口，避免同任务短时间重复空转。
+
 ## 可选发布自动化
 - 开启 `supervisor.autopr` 后，`STATUS=done` 且门禁通过时可自动建分支/提交/PR。
 - `mode=dev` 可启用 `auto_merge`，`staging/prod` 建议保持人工审批。

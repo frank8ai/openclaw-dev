@@ -10,6 +10,7 @@ OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可�
 - `scripts/trigger_supervisor.py`: 事件触发执行（可附带新任务并 kickstart launchd）。
 - `scripts/autopr.py`: 可选的自动分支/提交/PR/自动合并脚本。
 - `scripts/sync_to_skill.py`: 在主机侧同步文件到本地 skill 副本目录。
+- 可选第二大脑上下文注入（Daily Index + Session Slice），用于长任务降 token。
 - `references/agent_templates.md`: `agent/` 模板参考。
 
 ## 快速开始
@@ -88,6 +89,22 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
 }
 ```
 需要本机已安装并登录 `gh` CLI。
+
+可选：开启第二大脑精简上下文注入：
+```json
+{
+  "supervisor": {
+    "second_brain": {
+      "enabled": true,
+      "root": "..",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "max_chars": 1800
+    }
+  }
+}
+```
+该模式只注入紧凑关键信息，降低长会话 token 消耗。
 
 ## 质量门禁
 一键执行全部门禁：

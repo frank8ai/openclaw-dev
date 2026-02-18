@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0
+- Add optional second-brain compact context injection from `MEMORY.md` + daily index + latest session slice.
+- Add trigger dedup window in `scripts/trigger_supervisor.py` to avoid repeated identical runs.
+- Keep quality unchanged with existing QA gates, retries, and optional auto-PR pipeline.
+- Update init defaults/docs to include `supervisor.second_brain` settings and token-optimized workflow guidance.
+
 ## 2.2.0
 - Add event-driven supervisor trigger via `scripts/trigger_supervisor.py` (`agent/TRIGGER.json` + optional launchd kickstart).
 - Add QA self-healing retries (`--qa-retries`, `--qa-retry-sleep`) and config defaults in `openclaw.json`.

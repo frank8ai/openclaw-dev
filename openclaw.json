@@ -6,6 +6,16 @@
     "add_dirs": [
       "../skills/openclaw-dev"
     ],
+    "second_brain": {
+      "enabled": false,
+      "root": ".",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "include_memory_md": true,
+      "max_chars": 1800,
+      "max_sessions": 1,
+      "max_lines_per_file": 40
+    },
     "autopr": {
       "enabled": false,
       "required": false,

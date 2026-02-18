@@ -122,6 +122,7 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --task "实现功能 X"
 ```
 默认会尝试对 `com.openclaw.dev-supervisor` 执行 `launchctl kickstart`。
+为避免重复触发，命令默认启用去重窗口（`--dedup-seconds`，默认 `90` 秒）。
 
 ## 3.6) 可选自动 PR 流水线
 在 `openclaw.json` 启用：
@@ -143,6 +144,26 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
 }
 ```
 需要本机已登录 `gh` CLI。
+
+## 3.7) 可选第二大脑精简上下文
+在 `openclaw.json` 启用：
+```json
+{
+  "supervisor": {
+    "second_brain": {
+      "enabled": true,
+      "root": "..",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "include_memory_md": true,
+      "max_chars": 1800,
+      "max_sessions": 1,
+      "max_lines_per_file": 40
+    }
+  }
+}
+```
+开启后，supervisor 会把 Daily/Session 的关键信息以压缩格式注入 prompt，降低长会话 token 开销。
 
 ## 4) 处理人工决策
 当 `agent/STATUS.json.state = blocked` 时，查看 `agent/DECISIONS.md` 并回答后再继续：

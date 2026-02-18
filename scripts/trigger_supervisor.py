@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -65,6 +66,30 @@ def maybe_kickstart(label: str) -> tuple[int, str]:
     return proc.returncode, message
 
 
+def trigger_fingerprint(reason: str, task: str, reset_step: bool) -> str:
+    payload = f"{reason.strip()}|{task.strip()}|{int(reset_step)}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def should_skip_duplicate(trigger_path: Path, fingerprint: str, dedup_seconds: int) -> bool:
+    if dedup_seconds <= 0 or not trigger_path.exists():
+        return False
+    try:
+        data = json.loads(trigger_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(data, dict):
+        return False
+    previous = data.get("fingerprint")
+    requested_at = data.get("requested_at_epoch")
+    if not isinstance(previous, str) or previous != fingerprint:
+        return False
+    if not isinstance(requested_at, int):
+        return False
+    now_epoch = int(datetime.now().timestamp())
+    return (now_epoch - requested_at) <= dedup_seconds
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True, help="Repo root path.")
@@ -74,6 +99,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-reset-step", action="store_false", dest="reset_step")
     parser.add_argument("--kickstart-label", default="com.openclaw.dev-supervisor", help="launchd label.")
     parser.add_argument("--no-kickstart", action="store_true", help="Only write trigger file.")
+    parser.add_argument(
+        "--dedup-seconds",
+        type=int,
+        default=90,
+        help="Skip duplicate trigger payloads within this window (seconds). Set 0 to disable.",
+    )
     return parser.parse_args()
 
 
@@ -103,13 +134,21 @@ def main() -> int:
             status["checkpoint_id"] = ""
         write_status(status_path, status)
 
+    trigger_path = agent_dir / TRIGGER_FILE
+    fingerprint = trigger_fingerprint(args.reason, args.task, bool(args.reset_step))
+    if should_skip_duplicate(trigger_path, fingerprint, max(0, args.dedup_seconds)):
+        print("trigger: skipped duplicate request in dedup window")
+        return 0
+
+    now = datetime.now()
     payload = {
-        "requested_at": datetime.now().isoformat(timespec="seconds"),
+        "requested_at": now.isoformat(timespec="seconds"),
+        "requested_at_epoch": int(now.timestamp()),
         "reason": args.reason,
         "task": args.task,
         "reset_step": bool(args.reset_step),
+        "fingerprint": fingerprint,
     }
-    trigger_path = agent_dir / TRIGGER_FILE
     trigger_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if args.no_kickstart:

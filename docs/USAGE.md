@@ -121,6 +121,8 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --task "Implement feature X"
 ```
 By default it also runs `launchctl kickstart` on `com.openclaw.dev-supervisor`.
+To avoid duplicate triggers, the command deduplicates identical payloads in a short window
+(`--dedup-seconds`, default `90`).
 
 ## 3.6) Optional Auto-PR pipeline
 Enable in `openclaw.json`:
@@ -142,6 +144,26 @@ Enable in `openclaw.json`:
 }
 ```
 Requires `gh` CLI authentication.
+
+## 3.7) Optional second-brain compact context
+Enable in `openclaw.json`:
+```json
+{
+  "supervisor": {
+    "second_brain": {
+      "enabled": true,
+      "root": "..",
+      "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+      "session_glob_template": "90_Memory/{date}/session_*.md",
+      "include_memory_md": true,
+      "max_chars": 1800,
+      "max_sessions": 1,
+      "max_lines_per_file": 40
+    }
+  }
+}
+```
+When enabled, supervisor injects compact key lines from daily/session memory into Codex prompts.
 
 ## 4) Handle decisions
 When `agent/STATUS.json.state = blocked`, check `agent/DECISIONS.md` and answer the questions, then resume:

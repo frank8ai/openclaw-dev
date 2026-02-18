@@ -6,8 +6,10 @@ Resume Codex, run tests, update agent/STATUS.json.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -25,6 +27,16 @@ DEFAULT_SCOPE = "."
 TRIGGER_FILE = "TRIGGER.json"
 DEFAULT_QA_RETRIES = 1
 DEFAULT_QA_RETRY_SLEEP = 5
+SECOND_BRAIN_DEFAULTS = {
+    "enabled": False,
+    "root": ".",
+    "daily_index_template": "90_Memory/{date}/_DAILY_INDEX.md",
+    "session_glob_template": "90_Memory/{date}/session_*.md",
+    "include_memory_md": True,
+    "max_chars": 1800,
+    "max_sessions": 1,
+    "max_lines_per_file": 40,
+}
 
 
 def load_status(path: Path) -> dict:
@@ -146,23 +158,26 @@ def apply_trigger(repo: Path, agent_dir: Path, status_path: Path, payload: dict)
     return status
 
 
-def build_prompt(step: dict | None) -> str:
+def build_prompt(step: dict | None, second_brain_context: str = "") -> str:
     # Keep the prompt short and force file-based outputs to minimize token usage.
     step_desc = ""
     if step:
         step_desc = f"Current step: {step.get('name')} — {step.get('objective')}. "
+    context_desc = ""
+    if second_brain_context.strip():
+        context_desc = (
+            "Second-brain context (authoritative, compact, read-only):\n"
+            f"{second_brain_context}\n"
+        )
     return (
-        "You are running inside a repo. First, write a concrete 3-6 step plan to agent/PLAN.md "
-        "and then immediately start executing it. "
-        "Rules: follow agent/POLICY.md and agent/TASK.md; read agent/COMMANDS.env for "
-        "QA_CMD/TEST_CMD/LINT_CMD/TYPECHECK_CMD/EVAL_CMD/SECURITY_CMD/REVIEW_CMD. "
-        "Update agent/HOT.md every run and agent/WARM.md on milestone completion; keep within "
-        "agent/CONTEXT.json budgets. "
-        "Update agent/STATUS.json after each step. Do NOT paste large logs; write only tail summaries. "
-        "When acceptance passes (QA_CMD, fallback TEST_CMD), write agent/RESULT.md "
-        "(files changed, git diff --stat, verification, risks) and set STATUS.state=done. "
-        "If you need a human decision, write agent/DECISIONS.md and set STATUS.state=blocked. "
-        f"{step_desc}"
+        "Operate in-repo with minimal tokens. "
+        "First write a concrete 3-6 step plan to agent/PLAN.md, then execute immediately. "
+        "Follow agent/POLICY.md + agent/TASK.md + agent/COMMANDS.env. "
+        "Update agent/STATUS.json after each step; update HOT every run and WARM on milestones. "
+        "Never paste long logs, only tail summaries to files. "
+        "If human decision needed, write DECISIONS.md and set STATUS=blocked. "
+        "Gate: QA_CMD pass (fallback TEST_CMD). On pass, write RESULT.md and set STATUS=done. "
+        f"{step_desc}{context_desc}"
     )
 
 
@@ -183,8 +198,9 @@ def run_codex_start(
     timeout_s: int,
     step: dict | None,
     add_dirs: list[str],
+    second_brain_context: str,
 ) -> int:
-    prompt = build_prompt(step)
+    prompt = build_prompt(step, second_brain_context=second_brain_context)
     cmd = ["codex", "exec"]
     if full_auto:
         cmd.append("--full-auto")
@@ -194,9 +210,9 @@ def run_codex_start(
     return run_cmd(cmd, agent_dir.parent, timeout_s=timeout_s)
 
 
-def run_codex_resume(agent_dir: Path, timeout_s: int, step: dict | None) -> int:
+def run_codex_resume(agent_dir: Path, timeout_s: int, step: dict | None, second_brain_context: str) -> int:
     # Resume the most recent Codex exec run for this repo.
-    prompt = build_prompt(step)
+    prompt = build_prompt(step, second_brain_context=second_brain_context)
     cmd = [
         "codex",
         "exec",
@@ -328,6 +344,136 @@ def resolve_qa_settings(
     if qa_retry_sleep_arg is not None:
         retry_sleep = qa_retry_sleep_arg
     return max(0, retries), max(0, retry_sleep)
+
+
+def _safe_read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _truncate_chars(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    head = max_chars // 2
+    tail = max_chars - head
+    return text[:head] + "\n...\n" + text[-tail:]
+
+
+def _extract_priority_lines(text: str, max_lines: int) -> str:
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if not lines or max_lines <= 0:
+        return ""
+
+    pattern = re.compile(
+        r"(?i)(#gold|#p0|#p1|decision|decisions|risk|blocked|next|milestone|目标|决策|风险|下一步)"
+    )
+    selected: list[str] = []
+    for line in lines:
+        if pattern.search(line):
+            selected.append(line)
+            if len(selected) >= max_lines:
+                break
+
+    if not selected:
+        selected = lines[: max_lines // 2] + lines[-(max_lines - max_lines // 2) :]
+    return "\n".join(selected[:max_lines])
+
+
+def _resolve_second_brain_paths(
+    repo: Path,
+    config: dict,
+) -> tuple[Path, Path, list[Path], int, bool]:
+    root_raw = config.get("root", ".")
+    root = Path(str(root_raw)).expanduser()
+    if not root.is_absolute():
+        root = (repo / root).resolve()
+    date_str = datetime.now().strftime("%Y-%m-%d")
+
+    daily_template = str(config.get("daily_index_template", SECOND_BRAIN_DEFAULTS["daily_index_template"]))
+    session_template = str(config.get("session_glob_template", SECOND_BRAIN_DEFAULTS["session_glob_template"]))
+    include_memory_md = bool(config.get("include_memory_md", True))
+    max_sessions_raw = config.get("max_sessions", 1)
+    max_sessions = max(1, int(max_sessions_raw)) if isinstance(max_sessions_raw, int) else 1
+
+    daily_rel = daily_template.format(date=date_str)
+    session_rel = session_template.format(date=date_str)
+    daily_path = (root / daily_rel).resolve()
+
+    session_matches = sorted(
+        (Path(p).resolve() for p in glob.glob(str(root / session_rel))),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    session_paths = session_matches[:max_sessions]
+
+    return root, daily_path, session_paths, max_sessions, include_memory_md
+
+
+def resolve_second_brain_config(repo: Path) -> dict:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    raw: dict = {}
+    if isinstance(supervisor, dict):
+        candidate = supervisor.get("second_brain")
+        if isinstance(candidate, dict):
+            raw = candidate
+
+    merged = dict(SECOND_BRAIN_DEFAULTS)
+    merged.update(raw)
+
+    def to_int(value: object, fallback: int) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return fallback
+        return fallback
+
+    merged["enabled"] = bool(merged.get("enabled", False))
+    merged["max_chars"] = max(400, to_int(merged.get("max_chars", 1800), 1800))
+    merged["max_sessions"] = max(1, to_int(merged.get("max_sessions", 1), 1))
+    merged["max_lines_per_file"] = max(8, to_int(merged.get("max_lines_per_file", 40), 40))
+    return merged
+
+
+def build_second_brain_context(repo: Path, config: dict) -> str:
+    if not bool(config.get("enabled", False)):
+        return ""
+
+    _, daily_path, session_paths, _, include_memory_md = _resolve_second_brain_paths(repo, config)
+    max_chars = int(config.get("max_chars", 1800))
+    max_lines_per_file = int(config.get("max_lines_per_file", 40))
+    sections: list[str] = []
+
+    if include_memory_md:
+        memory_path = (Path(str(config.get("root", "."))).expanduser())
+        if not memory_path.is_absolute():
+            memory_path = (repo / memory_path).resolve()
+        memory_md = memory_path / "MEMORY.md"
+        memory_text = _safe_read_text(memory_md)
+        memory_excerpt = _extract_priority_lines(memory_text, max_lines=12)
+        if memory_excerpt:
+            sections.append(f"[MEMORY]\n{memory_excerpt}")
+
+    daily_text = _safe_read_text(daily_path)
+    daily_excerpt = _extract_priority_lines(daily_text, max_lines=max_lines_per_file)
+    if daily_excerpt:
+        sections.append(f"[DAILY_INDEX]\n{daily_excerpt}")
+
+    for session_path in session_paths:
+        text = _safe_read_text(session_path)
+        excerpt = _extract_priority_lines(text, max_lines=max_lines_per_file)
+        if excerpt:
+            sections.append(f"[SESSION:{session_path.name}]\n{excerpt}")
+
+    merged = "\n\n".join(sections).strip()
+    return _truncate_chars(merged, max_chars=max_chars)
 
 
 def _resolve_add_dir(repo: Path, raw: str) -> str | None:
@@ -719,6 +865,7 @@ def loop(
     add_dirs = resolve_add_dirs(repo, cli_add_dirs)
     sync_target = resolve_sync_target(add_dirs)
     autopr = load_autopr_config(repo)
+    second_brain_config = resolve_second_brain_config(repo)
     primary_codex_dir = str((Path.home() / ".codex").resolve())
     has_external_add_dirs = any(Path(path).resolve() != Path(primary_codex_dir).resolve() for path in add_dirs)
     if not agent_dir.exists():
@@ -808,6 +955,7 @@ def loop(
         result_path = agent_dir / "RESULT.md"
         plan_before = plan_path.stat().st_mtime if plan_path.exists() else 0
         result_before = result_path.stat().st_mtime if result_path.exists() else 0
+        second_brain_context = build_second_brain_context(repo, second_brain_config)
 
         if host_sync_step:
             codex_rc = run_host_sync(repo, sync_target or "", agent_dir, timeout_s=min(codex_timeout, 300))
@@ -818,12 +966,14 @@ def loop(
                 timeout_s=codex_timeout,
                 step=step,
                 add_dirs=add_dirs,
+                second_brain_context=second_brain_context,
             )
         else:
             codex_rc = run_codex_resume(
                 agent_dir,
                 timeout_s=codex_timeout,
                 step=step,
+                second_brain_context=second_brain_context,
             )
         attempts += 1
 

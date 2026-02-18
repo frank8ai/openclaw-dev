@@ -178,6 +178,27 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
 
     supervisor["add_dirs"] = add_dirs
 
+    second_brain = supervisor.get("second_brain")
+    if not isinstance(second_brain, dict):
+        second_brain = {}
+    if force or "enabled" not in second_brain:
+        second_brain["enabled"] = False
+    if force or not isinstance(second_brain.get("root"), str):
+        second_brain["root"] = "."
+    if force or not isinstance(second_brain.get("daily_index_template"), str):
+        second_brain["daily_index_template"] = "90_Memory/{date}/_DAILY_INDEX.md"
+    if force or not isinstance(second_brain.get("session_glob_template"), str):
+        second_brain["session_glob_template"] = "90_Memory/{date}/session_*.md"
+    if force or "include_memory_md" not in second_brain:
+        second_brain["include_memory_md"] = True
+    if force or not isinstance(second_brain.get("max_chars"), int):
+        second_brain["max_chars"] = 1800
+    if force or not isinstance(second_brain.get("max_sessions"), int):
+        second_brain["max_sessions"] = 1
+    if force or not isinstance(second_brain.get("max_lines_per_file"), int):
+        second_brain["max_lines_per_file"] = 40
+    supervisor["second_brain"] = second_brain
+
     autopr = supervisor.get("autopr")
     if not isinstance(autopr, dict):
         autopr = {}
