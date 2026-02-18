@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+- Add `scripts/run_supervisor_daemon.sh` for unattended long-running supervisor execution.
+- Document macOS `launchd` deployment and restart workflow in `docs/USAGE.md` and `docs/USAGE_CN.md`.
+- Clarify commit hygiene: avoid committing volatile runtime `agent/*` artifacts from active runs.
+- Refresh README/README_CN navigation and version notes.
+
 ## 2.1.0
 - Add enforced quality gates (`lint`, `typecheck`, `tests`, `eval`, `security`, `review`) with `make qa`.
 - Add CI workflow to run all gates on `push` and `pull_request`.

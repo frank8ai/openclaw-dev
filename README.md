@@ -6,6 +6,7 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `SKILL.md`: the skill entry point for OpenClaw.
 - `scripts/init_openclaw_dev.py`: initializes `agent/` templates in any target repo.
 - `scripts/supervisor_loop.py`: resumes Codex work, runs tests, and updates `agent/STATUS.json`.
+- `scripts/run_supervisor_daemon.sh`: wrapper for unattended long-running supervisor execution.
 - `scripts/sync_to_skill.py`: host-side sync from repo to local skill copy.
 - `references/agent_templates.md`: canonical templates for `agent/` files.
 - Deterministic `agent/BLUEPRINT.json` and minimal-context `agent/HOT.md`/`agent/WARM.md`.
@@ -31,6 +32,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --repo /path/to/your-repo \
   --interval 1800 --full-auto
 ```
+
+For unattended local deployment (macOS `launchd`), see `docs/USAGE.md` section `3.4`.
 
 4) If your task must write outside repo (e.g. sync to sibling skill dir), declare writable dirs:
 ```json
@@ -82,11 +85,12 @@ make review
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 
 ## Version
-- `VERSION` file and Git tag `v2.0.0`.
+- `VERSION` file and Git tag `v2.1.1`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.
 - When the agent needs human approval (new deps, API changes), it writes to `agent/DECISIONS.md` and sets `STATUS.state=blocked`.
+- Runtime `agent/*` files from active runs (`HOT`, `WARM`, `PLAN`, `RESULT`, `STATUS`) are volatile; stage commits selectively.
 
 ## Documentation
 - English

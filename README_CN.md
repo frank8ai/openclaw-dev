@@ -6,6 +6,7 @@ OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可�
 - `SKILL.md`: OpenClaw skill 入口定义。
 - `scripts/init_openclaw_dev.py`: 在目标仓库初始化 `agent/` 模板。
 - `scripts/supervisor_loop.py`: 循环驱动 Codex 执行/续跑，并更新 `agent/STATUS.json`。
+- `scripts/run_supervisor_daemon.sh`: 用于本机无人值守常驻执行 supervisor 的封装脚本。
 - `scripts/sync_to_skill.py`: 在主机侧同步文件到本地 skill 副本目录。
 - `references/agent_templates.md`: `agent/` 模板参考。
 
@@ -31,6 +32,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --interval 1800 --full-auto \
   --codex-timeout 300 --max-attempts 12
 ```
+
+如需本机无人值守常驻运行（macOS `launchd`），见 `docs/USAGE_CN.md` 的 `3.4` 节。
 
 ## 跨目录同步（推荐配置）
 如果任务需要写到仓库外目录（例如 `../skills/openclaw-dev`），在 `openclaw.json` 中配置：
@@ -85,3 +88,6 @@ make review
 - `docs/WORKFLOW.md`
 - `docs/TROUBLESHOOTING.md`
 - `docs/QUALITY_GATES.md`
+
+## 说明
+- 活跃运行产生的 `agent/*` 文件（`HOT`、`WARM`、`PLAN`、`RESULT`、`STATUS`）属于运行态数据，默认不建议纳入常规提交。

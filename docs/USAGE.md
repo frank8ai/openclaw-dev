@@ -64,6 +64,51 @@ This runs outside Codex sandbox and is safe for local one-shot sync.
 ## 3.3) Sync step behavior
 If a blueprint step objective contains both `sync` and `skill`, `supervisor_loop.py` will run host sync directly and skip Codex fallback logic for that step. This prevents unrelated rewrites of `agent/PLAN.md` and `agent/HOT.md` during sync-only runs.
 
+## 3.4) Persistent local deployment with launchd (macOS)
+Use the wrapper script for unattended restart-safe operation:
+```bash
+chmod +x /path/to/openclaw-dev/scripts/run_supervisor_daemon.sh
+OPENCLAW_TARGET_REPO=/path/to/your-repo \
+  /path/to/openclaw-dev/scripts/run_supervisor_daemon.sh
+```
+
+Create `~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>ai.openclaw.dev.supervisor</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/zsh</string>
+      <string>-lc</string>
+      <string>/path/to/openclaw-dev/scripts/run_supervisor_daemon.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>OPENCLAW_TARGET_REPO</key><string>/path/to/your-repo</string>
+      <key>OPENCLAW_SUPERVISOR_INTERVAL</key><string>1800</string>
+      <key>OPENCLAW_CODEX_TIMEOUT</key><string>300</string>
+      <key>OPENCLAW_MAX_ATTEMPTS</key><string>12</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>WorkingDirectory</key><string>/path/to/openclaw-dev</string>
+    <key>StandardOutPath</key><string>/tmp/openclaw-dev-supervisor.out.log</string>
+    <key>StandardErrorPath</key><string>/tmp/openclaw-dev-supervisor.err.log</string>
+  </dict>
+</plist>
+```
+
+Load/unload:
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
+launchctl kickstart -k gui/$(id -u)/ai.openclaw.dev.supervisor
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
+```
+
 ## 4) Handle decisions
 When `agent/STATUS.json.state = blocked`, check `agent/DECISIONS.md` and answer the questions, then resume:
 ```bash
@@ -84,4 +129,17 @@ make test
 make eval
 make security
 make review
+```
+
+## 6) Commit hygiene (recommended)
+The following files are run artifacts and usually should not be part of functional commits:
+- `agent/HOT.md`
+- `agent/WARM.md`
+- `agent/PLAN.md`
+- `agent/RESULT.md`
+- `agent/STATUS.json`
+
+Use targeted staging:
+```bash
+git add <meaningful-files-only>
 ```

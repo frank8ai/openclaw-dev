@@ -65,6 +65,51 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 ## 3.3) 同步步骤行为
 当蓝图 step 的 objective 同时包含 `sync` 和 `skill` 时，`supervisor_loop.py` 会直接执行 host sync，并跳过该步的 Codex fallback 逻辑，从而避免无关改写 `agent/PLAN.md` 与 `agent/HOT.md`。
 
+## 3.4) 使用 launchd 常驻运行（macOS）
+先使用封装脚本验证无人值守运行：
+```bash
+chmod +x /path/to/openclaw-dev/scripts/run_supervisor_daemon.sh
+OPENCLAW_TARGET_REPO=/path/to/your-repo \
+  /path/to/openclaw-dev/scripts/run_supervisor_daemon.sh
+```
+
+创建 `~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist`：
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>ai.openclaw.dev.supervisor</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/zsh</string>
+      <string>-lc</string>
+      <string>/path/to/openclaw-dev/scripts/run_supervisor_daemon.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>OPENCLAW_TARGET_REPO</key><string>/path/to/your-repo</string>
+      <key>OPENCLAW_SUPERVISOR_INTERVAL</key><string>1800</string>
+      <key>OPENCLAW_CODEX_TIMEOUT</key><string>300</string>
+      <key>OPENCLAW_MAX_ATTEMPTS</key><string>12</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>WorkingDirectory</key><string>/path/to/openclaw-dev</string>
+    <key>StandardOutPath</key><string>/tmp/openclaw-dev-supervisor.out.log</string>
+    <key>StandardErrorPath</key><string>/tmp/openclaw-dev-supervisor.err.log</string>
+  </dict>
+</plist>
+```
+
+加载/重载/停止：
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
+launchctl kickstart -k gui/$(id -u)/ai.openclaw.dev.supervisor
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
+```
+
 ## 4) 处理人工决策
 当 `agent/STATUS.json.state = blocked` 时，查看 `agent/DECISIONS.md` 并回答后再继续：
 ```bash
@@ -85,4 +130,17 @@ make test
 make eval
 make security
 make review
+```
+
+## 6) 提交清洁建议
+以下文件属于运行态产物，通常不应进入功能提交：
+- `agent/HOT.md`
+- `agent/WARM.md`
+- `agent/PLAN.md`
+- `agent/RESULT.md`
+- `agent/STATUS.json`
+
+建议只精确暂存有价值文件：
+```bash
+git add <有价值文件路径>
 ```
