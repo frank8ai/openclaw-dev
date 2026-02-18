@@ -35,3 +35,18 @@ Fix:
 - Ensure `agent/STATUS.json` contains namespace keys.
 - Verify `openclaw.json` -> `supervisor.memory_namespace.strict_isolation=true`.
 - Use `python3 scripts/memory_namespace.py ... resolve` to confirm effective paths.
+
+## Auto-PR is blocked by security gate
+Cause: `supervisor.security.require_autopr_approval=true` but `agent/APPROVALS.json` has no `autopr=true`.
+
+Fix:
+- Approve explicitly: `python3 scripts/security_gate.py --file agent/APPROVALS.json approve --action autopr`
+- Re-run supervisor.
+- Check audit trail in `logs/security_audit.jsonl`.
+
+## ALERTS.md appears frequently
+Cause: rolling observability thresholds are exceeded (failure rate, route miss rate, prompt token budget).
+
+Fix:
+- Inspect report: `python3 scripts/observability_report.py --repo . --json`
+- Triage failures first, then adjust thresholds in `openclaw.json` -> `supervisor.observability` if needed.

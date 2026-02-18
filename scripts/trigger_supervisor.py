@@ -13,6 +13,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from handoff_protocol import build_handoff_template, load_handoff_file
+
 TRIGGER_FILE = "TRIGGER.json"
 
 
@@ -83,10 +85,11 @@ def trigger_fingerprint(
     tenant_id: str,
     agent_id: str,
     project_id: str,
+    handoff_id: str,
 ) -> str:
     payload = (
         f"{reason.strip()}|{task.strip()}|{int(reset_step)}|"
-        f"{tenant_id.strip()}|{agent_id.strip()}|{project_id.strip()}"
+        f"{tenant_id.strip()}|{agent_id.strip()}|{project_id.strip()}|{handoff_id.strip()}"
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -120,6 +123,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tenant-id", default="", help="Tenant namespace id (optional).")
     parser.add_argument("--agent-id", default="", help="Agent namespace id (optional).")
     parser.add_argument("--project-id", default="", help="Project namespace id (optional).")
+    parser.add_argument("--handoff-file", default="", help="Optional handoff json file path.")
+    parser.add_argument("--handoff-from", default="requester", help="Default handoff from-agent.")
+    parser.add_argument("--handoff-to", default="", help="Default handoff to-agent, fallback to agent-id.")
     parser.add_argument("--kickstart-label", default="com.openclaw.dev-supervisor", help="launchd label.")
     parser.add_argument("--no-kickstart", action="store_true", help="Only write trigger file.")
     parser.add_argument(
@@ -129,6 +135,29 @@ def parse_args() -> argparse.Namespace:
         help="Skip duplicate trigger payloads within this window (seconds). Set 0 to disable.",
     )
     return parser.parse_args()
+
+
+def resolve_handoff_payload(
+    args: argparse.Namespace,
+    agent_id: str,
+) -> tuple[dict | None, list[str]]:
+    if isinstance(args.handoff_file, str) and args.handoff_file.strip():
+        path = Path(args.handoff_file).expanduser().resolve()
+        payload, errors = load_handoff_file(path)
+        if payload is None:
+            return None, errors
+        return payload, []
+
+    task_text = str(args.task).strip()
+    if not task_text:
+        return None, []
+
+    handoff_to = str(args.handoff_to).strip() or agent_id
+    payload = build_handoff_template(str(args.handoff_from), handoff_to, task_text)
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        metadata["trigger_reason"] = str(args.reason).strip()
+    return payload, []
 
 
 def main() -> int:
@@ -149,6 +178,15 @@ def main() -> int:
     tenant_id = normalize_identifier(args.tenant_id, str(status.get("tenant_id", "default")))
     agent_id = normalize_identifier(args.agent_id, str(status.get("agent_id", "main")))
     project_id = normalize_identifier(args.project_id, str(status.get("project_id", repo.name)))
+    handoff_payload, handoff_errors = resolve_handoff_payload(args, agent_id)
+    if handoff_errors:
+        for err in handoff_errors:
+            print(f"trigger: handoff invalid: {err}", file=sys.stderr)
+        return 2
+    handoff_id = ""
+    if isinstance(handoff_payload, dict):
+        value = handoff_payload.get("handoff_id")
+        handoff_id = str(value).strip() if isinstance(value, str) else ""
 
     if status:
         status["state"] = "idle"
@@ -159,6 +197,8 @@ def main() -> int:
         status["tenant_id"] = tenant_id
         status["agent_id"] = agent_id
         status["project_id"] = project_id
+        if handoff_id:
+            status["handoff_id"] = handoff_id
         if args.reset_step:
             status["current_step"] = 1
             status["checkpoint_id"] = ""
@@ -172,6 +212,7 @@ def main() -> int:
         tenant_id,
         agent_id,
         project_id,
+        handoff_id,
     )
     if should_skip_duplicate(trigger_path, fingerprint, max(0, args.dedup_seconds)):
         print("trigger: skipped duplicate request in dedup window")
@@ -187,6 +228,7 @@ def main() -> int:
         "tenant_id": tenant_id,
         "agent_id": agent_id,
         "project_id": project_id,
+        "handoff": handoff_payload,
         "fingerprint": fingerprint,
     }
     trigger_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

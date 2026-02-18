@@ -35,3 +35,18 @@
 - 确认 `agent/STATUS.json` 中存在并正确写入命名空间字段
 - 确认 `openclaw.json` 的 `supervisor.memory_namespace.strict_isolation=true`
 - 用 `python3 scripts/memory_namespace.py ... resolve` 检查实际路径
+
+## Auto-PR 被安全门禁拦截
+原因：`supervisor.security.require_autopr_approval=true`，但 `agent/APPROVALS.json` 没有 `autopr=true`。
+
+处理方式：
+- 执行授权：`python3 scripts/security_gate.py --file agent/APPROVALS.json approve --action autopr`
+- 重新运行 supervisor
+- 查看审计日志：`logs/security_audit.jsonl`
+
+## 频繁出现 ALERTS.md
+原因：滚动观测阈值超限（失败率、路由命中、prompt token 预算）。
+
+处理方式：
+- 先看报告：`python3 scripts/observability_report.py --repo . --json`
+- 优先修失败根因，再按需调整 `openclaw.json` 的 `supervisor.observability` 阈值

@@ -8,6 +8,9 @@ OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可�
 - `scripts/supervisor_loop.py`: 循环驱动 Codex 执行/续跑，并更新 `agent/STATUS.json`。
 - `scripts/run_supervisor_daemon.sh`: 用于本机无人值守常驻执行 supervisor 的封装脚本。
 - `scripts/trigger_supervisor.py`: 事件触发执行（可附带新任务并 kickstart launchd）。
+- `scripts/handoff_protocol.py`: 标准化 JSON 交接协议（模板/校验/摘要）。
+- `scripts/observability_report.py`: 从 supervisor 日志生成可观测性报告与告警摘要。
+- `scripts/security_gate.py`: 高风险外部动作审批与审计工具。
 - `scripts/memory_namespace.py`: tenant/agent/project 记忆命名空间解析与初始化工具。
 - `scripts/autopr.py`: 可选的自动分支/提交/PR/自动合并脚本。
 - `scripts/sync_to_skill.py`: 在主机侧同步文件到本地 skill 副本目录。
@@ -72,7 +75,15 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
-  --task "实现功能 X"
+  --task "实现功能 X" \
+  --handoff-from commander \
+  --handoff-to engineer
+```
+
+可选：先校验交接文件再触发：
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py validate \
+  --file /path/to/HANDOFF.json
 ```
 
 可选：通过 `openclaw.json` 开启自动 PR：
@@ -123,6 +134,21 @@ python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
   init
 ```
 `resolve` 子命令仅解析并输出路径，不写入文件。
+
+可选：查看可观测性与告警报告：
+```bash
+python3 /path/to/openclaw-dev/scripts/observability_report.py \
+  --repo /path/to/your-repo --json
+```
+supervisor 会持续写入 `memory/supervisor_nightly.log`，当阈值超限会生成 `agent/ALERTS.md`。
+
+可选：为外部动作授予审批（例如 autopr）：
+```bash
+python3 /path/to/openclaw-dev/scripts/security_gate.py \
+  --file /path/to/your-repo/agent/APPROVALS.json \
+  approve --action autopr
+```
+当 `supervisor.security.require_autopr_approval=true` 时，未审批会被门禁拦截。
 
 ## 质量门禁
 一键执行全部门禁：

@@ -35,6 +35,9 @@ jobs:
       - name: Eval suite
         run: pytest -q tests/eval
 
+      - name: Multi-agent regression
+        run: pytest -q tests/eval/test_multi_agent_regression.py
+
       - name: Security scan
         run: bandit -q -ii -c bandit.yaml -r scripts
 

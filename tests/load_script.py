@@ -6,9 +6,13 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = ROOT / "scripts"
 
 
 def load_script_module(relative_path: str, module_name: str) -> ModuleType:
+    scripts_dir_str = str(SCRIPTS_DIR.resolve())
+    if scripts_dir_str not in sys.path:
+        sys.path.insert(0, scripts_dir_str)
     script_path = ROOT / relative_path
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     if spec is None or spec.loader is None:

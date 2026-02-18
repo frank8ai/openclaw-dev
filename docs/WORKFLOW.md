@@ -11,6 +11,9 @@
 - `agent/TASK.md`: scope, milestones, acceptance
 - `agent/POLICY.md`: hard rules
 - `agent/STATUS.json`: state machine
+- `agent/HANDOFF.json`: standardized inter-agent handoff contract
+- `agent/APPROVALS.json`: explicit approvals for high-risk outbound actions
+- `agent/ALERTS.md`: generated observability alerts
 - `agent/DECISIONS.md`: human approvals
 - `agent/RESULT.md`: final delivery summary
 - `agent/BLUEPRINT.json`: deterministic steps (model does not decide flow)
@@ -38,6 +41,7 @@
 ## Self-healing
 - QA failures can retry automatically (`--qa-retries`, `--qa-retry-sleep`) before marking failed.
 - Timeouts/no-progress are tracked in `STATUS.last_error_sig` and routed to blocked with clear actions.
+- Observability rollups are written to `memory/supervisor_nightly.log`; threshold breaches emit `agent/ALERTS.md`.
 
 ## Context strategy (token-optimized)
 - Default: HOT/WARM + tail summaries.
@@ -49,3 +53,4 @@
 ## Optional release automation
 - Enable `supervisor.autopr` to create branch/commit/PR automatically after `STATUS=done` and gates pass.
 - `mode=dev` allows `auto_merge`; `staging/prod` should keep manual approval.
+- With `supervisor.security.require_autopr_approval=true`, Auto-PR is blocked unless `agent/APPROVALS.json` grants `autopr`.

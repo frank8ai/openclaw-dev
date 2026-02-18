@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.0
+- Add standardized handoff protocol (`scripts/handoff_protocol.py`) and integrate handoff context into trigger + supervisor prompt.
+- Add observability metrics (`route_hit`, `failure`, `prompt_tokens`, `token_cost`) and rolling alert output (`agent/ALERTS.md`).
+- Add security gate (`scripts/security_gate.py`) with approval file + audit log, and enforce Auto-PR approval when configured.
+- Add CI multi-agent regression checks (`tests/eval/test_multi_agent_regression.py`) for route isolation and convergence behavior.
+- Update docs and init defaults for `agent/HANDOFF.json`, `agent/APPROVALS.json`, `supervisor.observability`, and `supervisor.security`.
+
 ## 2.4.0
 - Add strict tenant/agent/project memory namespace support in supervisor context loading.
 - Add namespace metadata propagation through trigger payload and runtime status (`tenant_id`, `agent_id`, `project_id`).

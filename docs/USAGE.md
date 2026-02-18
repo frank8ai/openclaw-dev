@@ -18,6 +18,8 @@ This creates:
 - `agent/BLUEPRINT.json`
 - `agent/CONTEXT.json`
 - `agent/HOT.md` / `agent/WARM.md` / `agent/COLD.ref.json`
+- `agent/HANDOFF.json`
+- `agent/APPROVALS.json`
 
 ## 2) Start the Codex loop (first run)
 ```bash
@@ -119,6 +121,8 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
   --task "Implement feature X" \
+  --handoff-from commander \
+  --handoff-to engineer \
   --tenant-id default \
   --agent-id assistant-main \
   --project-id your-repo
@@ -195,6 +199,59 @@ python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
   --agent-id assistant-main \
   --project-id your-repo \
   resolve
+```
+
+## 3.9) Standardized handoff contract
+Generate a handoff template:
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py template \
+  --from-agent commander --to-agent engineer --objective "Implement feature X"
+```
+Validate handoff file:
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py validate --file /path/to/HANDOFF.json
+```
+Trigger with explicit handoff:
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo --handoff-file /path/to/HANDOFF.json
+```
+
+## 3.10) Observability report and alerts
+Report current window metrics:
+```bash
+python3 /path/to/openclaw-dev/scripts/observability_report.py --repo /path/to/your-repo --json
+```
+The supervisor writes route/failure/token metrics into `memory/supervisor_nightly.log`.
+When thresholds are exceeded, `agent/ALERTS.md` is generated.
+
+## 3.11) Security approvals and audit
+Approve outbound Auto-PR:
+```bash
+python3 /path/to/openclaw-dev/scripts/security_gate.py \
+  --file /path/to/your-repo/agent/APPROVALS.json \
+  approve --action autopr
+```
+When `supervisor.security.require_autopr_approval=true`, Auto-PR is blocked until approval exists.
+Recommended config:
+```json
+{
+  "supervisor": {
+    "security": {
+      "enabled": true,
+      "require_autopr_approval": true,
+      "approval_file": "agent/APPROVALS.json",
+      "audit_log": "logs/security_audit.jsonl"
+    },
+    "observability": {
+      "enabled": true,
+      "window": 20,
+      "failure_rate_alert": 0.35,
+      "route_miss_rate_alert": 0.05,
+      "prompt_token_budget": 2400
+    }
+  }
+}
 ```
 
 ## 4) Handle decisions

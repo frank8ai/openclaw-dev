@@ -18,6 +18,8 @@ python3 /path/to/openclaw-dev/scripts/init_openclaw_dev.py \
 - `agent/BLUEPRINT.json`
 - `agent/CONTEXT.json`
 - `agent/HOT.md` / `agent/WARM.md` / `agent/COLD.ref.json`
+- `agent/HANDOFF.json`
+- `agent/APPROVALS.json`
 
 ## 2) 首次启动 Codex 循环
 ```bash
@@ -120,6 +122,8 @@ python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
   --task "实现功能 X" \
+  --handoff-from commander \
+  --handoff-to engineer \
   --tenant-id default \
   --agent-id assistant-main \
   --project-id your-repo
@@ -195,6 +199,59 @@ python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
   --agent-id assistant-main \
   --project-id your-repo \
   resolve
+```
+
+## 3.9) 标准化交接协议
+生成交接模板：
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py template \
+  --from-agent commander --to-agent engineer --objective "实现功能 X"
+```
+校验交接文件：
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py validate --file /path/to/HANDOFF.json
+```
+使用交接文件触发：
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo --handoff-file /path/to/HANDOFF.json
+```
+
+## 3.10) 可观测性报告与告警
+查看当前窗口指标：
+```bash
+python3 /path/to/openclaw-dev/scripts/observability_report.py --repo /path/to/your-repo --json
+```
+supervisor 会把路由命中/失败率/token 指标写入 `memory/supervisor_nightly.log`。
+超过阈值会自动生成 `agent/ALERTS.md`。
+
+## 3.11) 安全审批与审计
+为 Auto-PR 授权：
+```bash
+python3 /path/to/openclaw-dev/scripts/security_gate.py \
+  --file /path/to/your-repo/agent/APPROVALS.json \
+  approve --action autopr
+```
+当 `supervisor.security.require_autopr_approval=true` 时，未审批将被门禁拦截。
+推荐配置：
+```json
+{
+  "supervisor": {
+    "security": {
+      "enabled": true,
+      "require_autopr_approval": true,
+      "approval_file": "agent/APPROVALS.json",
+      "audit_log": "logs/security_audit.jsonl"
+    },
+    "observability": {
+      "enabled": true,
+      "window": 20,
+      "failure_rate_alert": 0.35,
+      "route_miss_rate_alert": 0.05,
+      "prompt_token_budget": 2400
+    }
+  }
+}
 ```
 
 ## 4) 处理人工决策

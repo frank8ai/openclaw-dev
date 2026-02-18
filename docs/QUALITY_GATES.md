@@ -27,6 +27,7 @@ CI (Continuous Integration) in this repo means every `push`/`pull_request` runs 
 | Typecheck | `make typecheck` | `mypy scripts` returns 0 |
 | Tests | `make test` | `pytest tests` returns 0 |
 | Eval | `make eval` | `pytest tests/eval` returns 0 |
+| Multi-Agent Eval | `pytest -q tests/eval/test_multi_agent_regression.py` | Route isolation + convergence checks return 0 |
 | Security | `make security` | `bandit -ii` returns 0 with `bandit.yaml` policy |
 | Review | `make review` | Review artifact checks return 0 |
 | Full Gate | `make qa` | All gates pass in order |

@@ -16,6 +16,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from handoff_protocol import summarize_handoff, validate_handoff
+from security_gate import append_audit_log, is_action_approved
+
 RESULT_TEMPLATE = """# Result
 - 完成情况：{completion}
 - 改动文件：{changed_files}
@@ -25,6 +28,7 @@ RESULT_TEMPLATE = """# Result
 """
 DEFAULT_SCOPE = "."
 TRIGGER_FILE = "TRIGGER.json"
+HANDOFF_FILE = "HANDOFF.json"
 DEFAULT_QA_RETRIES = 1
 DEFAULT_QA_RETRY_SLEEP = 5
 SECOND_BRAIN_DEFAULTS = {
@@ -54,6 +58,56 @@ MEMORY_NAMESPACE_DEFAULTS = {
         "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
     ),
 }
+OBSERVABILITY_DEFAULTS = {
+    "enabled": True,
+    "window": 20,
+    "failure_rate_alert": 0.35,
+    "route_miss_rate_alert": 0.05,
+    "prompt_token_budget": 2400,
+    "token_cost_per_1k_usd": 0.0,
+    "token_cost_alert_usd": 0.0,
+    "alerts_file": "agent/ALERTS.md",
+}
+FAILURE_STATUS_MARKERS = (
+    "tests_failed",
+    "run_tests_failed",
+    "codex_failed",
+    "sync_failed",
+    "autopr_failed",
+    "max_attempts",
+    "codex_timeout",
+    "codex_no_progress",
+)
+SECURITY_DEFAULTS = {
+    "enabled": True,
+    "require_autopr_approval": True,
+    "approval_file": "agent/APPROVALS.json",
+    "audit_log": "logs/security_audit.jsonl",
+    "allowed_operation_classes": [
+        "read_repo",
+        "edit_files",
+        "run_tests",
+        "sync_skill",
+    ],
+    "blocked_command_patterns": [
+        "rm -rf /",
+        "sudo ",
+        "curl http://",
+        "curl https://",
+    ],
+}
+DEFAULT_ALLOWED_OPERATION_CLASSES = [
+    "read_repo",
+    "edit_files",
+    "run_tests",
+    "sync_skill",
+]
+DEFAULT_BLOCKED_COMMAND_PATTERNS = [
+    "rm -rf /",
+    "sudo ",
+    "curl http://",
+    "curl https://",
+]
 
 
 def load_status(path: Path) -> dict:
@@ -66,6 +120,24 @@ def load_status(path: Path) -> dict:
 def save_status(path: Path, status: dict) -> None:
     status["last_update"] = datetime.now().isoformat(timespec="seconds")
     path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def load_handoff_summary(agent_dir: Path, max_items: int = 3) -> str:
+    handoff_path = agent_dir / HANDOFF_FILE
+    if not handoff_path.exists():
+        return ""
+    try:
+        payload = json.loads(handoff_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    return summarize_handoff(payload, max_items=max_items)
 
 
 def run_cmd(cmd: list[str], cwd: Path, timeout_s: int | None = None) -> int:
@@ -174,12 +246,33 @@ def apply_trigger(repo: Path, agent_dir: Path, status_path: Path, payload: dict)
     status["agent_id"] = _normalize_identifier(payload.get("agent_id"), str(status.get("agent_id", "main")))
     status["project_id"] = _normalize_identifier(payload.get("project_id"), str(status.get("project_id", "default")))
 
+    handoff = payload.get("handoff")
+    if isinstance(handoff, dict):
+        ok, errors = validate_handoff(handoff)
+        if ok:
+            _write_json(agent_dir / HANDOFF_FILE, handoff)
+            handoff_id = handoff.get("handoff_id")
+            handoff_status = handoff.get("status")
+            if isinstance(handoff_id, str) and handoff_id.strip():
+                status["handoff_id"] = handoff_id.strip()
+            if isinstance(handoff_status, str) and handoff_status.strip():
+                status["handoff_status"] = handoff_status.strip()
+            status["handoff_error"] = ""
+        else:
+            status["handoff_error"] = "; ".join(errors[:5])
+
     save_status(status_path, status)
     append_nightly_log(repo, "triggered", diff_written=False, scope_used=DEFAULT_SCOPE)
     return status
 
 
-def build_prompt(step: dict | None, second_brain_context: str = "", namespace: dict | None = None) -> str:
+def build_prompt(
+    step: dict | None,
+    second_brain_context: str = "",
+    namespace: dict | None = None,
+    handoff_context: str = "",
+    security_context: str = "",
+) -> str:
     # Keep the prompt short and force file-based outputs to minimize token usage.
     step_desc = ""
     if step:
@@ -190,6 +283,15 @@ def build_prompt(step: dict | None, second_brain_context: str = "", namespace: d
             "Second-brain context (authoritative, compact, read-only):\n"
             f"{second_brain_context}\n"
         )
+    handoff_desc = ""
+    if handoff_context.strip():
+        handoff_desc = (
+            "Structured handoff contract (authoritative for collaboration boundary):\n"
+            f"{handoff_context}\n"
+        )
+    security_desc = ""
+    if security_context.strip():
+        security_desc = f"{security_context}\n"
     namespace_desc = ""
     if isinstance(namespace, dict):
         tenant_id = str(namespace.get("tenant_id", "default"))
@@ -208,7 +310,7 @@ def build_prompt(step: dict | None, second_brain_context: str = "", namespace: d
         "Never paste long logs, only tail summaries to files. "
         "If human decision needed, write DECISIONS.md and set STATUS=blocked. "
         "Gate: QA_CMD pass (fallback TEST_CMD). On pass, write RESULT.md and set STATUS=done. "
-        f"{step_desc}{namespace_desc}{context_desc}"
+        f"{step_desc}{namespace_desc}{security_desc}{handoff_desc}{context_desc}"
     )
 
 
@@ -231,8 +333,16 @@ def run_codex_start(
     add_dirs: list[str],
     second_brain_context: str,
     namespace: dict,
+    handoff_context: str,
+    security_context: str,
 ) -> int:
-    prompt = build_prompt(step, second_brain_context=second_brain_context, namespace=namespace)
+    prompt = build_prompt(
+        step,
+        second_brain_context=second_brain_context,
+        namespace=namespace,
+        handoff_context=handoff_context,
+        security_context=security_context,
+    )
     cmd = ["codex", "exec"]
     if full_auto:
         cmd.append("--full-auto")
@@ -248,9 +358,17 @@ def run_codex_resume(
     step: dict | None,
     second_brain_context: str,
     namespace: dict,
+    handoff_context: str,
+    security_context: str,
 ) -> int:
     # Resume the most recent Codex exec run for this repo.
-    prompt = build_prompt(step, second_brain_context=second_brain_context, namespace=namespace)
+    prompt = build_prompt(
+        step,
+        second_brain_context=second_brain_context,
+        namespace=namespace,
+        handoff_context=handoff_context,
+        security_context=security_context,
+    )
     cmd = [
         "codex",
         "exec",
@@ -382,6 +500,115 @@ def resolve_qa_settings(
     if qa_retry_sleep_arg is not None:
         retry_sleep = qa_retry_sleep_arg
     return max(0, retries), max(0, retry_sleep)
+
+
+def resolve_observability_config(repo: Path) -> dict:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    raw: dict = {}
+    if isinstance(supervisor, dict):
+        candidate = supervisor.get("observability")
+        if isinstance(candidate, dict):
+            raw = candidate
+
+    merged = dict(OBSERVABILITY_DEFAULTS)
+    merged.update(raw)
+
+    def _to_float(value: object, fallback: float) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                return fallback
+        return fallback
+
+    def _to_int(value: object, fallback: int) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return fallback
+        return fallback
+
+    merged["enabled"] = bool(merged.get("enabled", True))
+    merged["window"] = max(5, _to_int(merged.get("window", 20), 20))
+    merged["failure_rate_alert"] = min(1.0, max(0.0, _to_float(merged.get("failure_rate_alert", 0.35), 0.35)))
+    merged["route_miss_rate_alert"] = min(
+        1.0,
+        max(0.0, _to_float(merged.get("route_miss_rate_alert", 0.05), 0.05)),
+    )
+    merged["prompt_token_budget"] = max(400, _to_int(merged.get("prompt_token_budget", 2400), 2400))
+    merged["token_cost_per_1k_usd"] = max(0.0, _to_float(merged.get("token_cost_per_1k_usd", 0.0), 0.0))
+    merged["token_cost_alert_usd"] = max(0.0, _to_float(merged.get("token_cost_alert_usd", 0.0), 0.0))
+    if not isinstance(merged.get("alerts_file"), str) or not str(merged.get("alerts_file")).strip():
+        merged["alerts_file"] = "agent/ALERTS.md"
+    return merged
+
+
+def estimate_prompt_tokens(prompt: str) -> int:
+    compact = prompt.strip()
+    if not compact:
+        return 0
+    # Cheap approximation for mixed English/CJK prompts.
+    return max(1, int(len(compact) / 3.8))
+
+
+def resolve_security_config(repo: Path) -> dict:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    raw: dict = {}
+    if isinstance(supervisor, dict):
+        candidate = supervisor.get("security")
+        if isinstance(candidate, dict):
+            raw = candidate
+
+    merged = dict(SECURITY_DEFAULTS)
+    merged.update(raw)
+    merged["enabled"] = bool(merged.get("enabled", True))
+    merged["require_autopr_approval"] = bool(merged.get("require_autopr_approval", True))
+    if not isinstance(merged.get("approval_file"), str) or not str(merged.get("approval_file")).strip():
+        merged["approval_file"] = "agent/APPROVALS.json"
+    if not isinstance(merged.get("audit_log"), str) or not str(merged.get("audit_log")).strip():
+        merged["audit_log"] = "logs/security_audit.jsonl"
+
+    allowed = merged.get("allowed_operation_classes")
+    if isinstance(allowed, list):
+        merged["allowed_operation_classes"] = [str(item).strip() for item in allowed if str(item).strip()]
+    else:
+        merged["allowed_operation_classes"] = list(DEFAULT_ALLOWED_OPERATION_CLASSES)
+
+    blocked = merged.get("blocked_command_patterns")
+    if isinstance(blocked, list):
+        merged["blocked_command_patterns"] = [str(item).strip() for item in blocked if str(item).strip()]
+    else:
+        merged["blocked_command_patterns"] = list(DEFAULT_BLOCKED_COMMAND_PATTERNS)
+    return merged
+
+
+def resolve_security_path(repo: Path, path_raw: object) -> Path:
+    path = Path(str(path_raw)).expanduser()
+    if not path.is_absolute():
+        path = (repo / path).resolve()
+    return path
+
+
+def build_security_context(config: dict) -> str:
+    if not bool(config.get("enabled", True)):
+        return ""
+    allowed = config.get("allowed_operation_classes", [])
+    blocked = config.get("blocked_command_patterns", [])
+    allowed_text = ", ".join(str(item) for item in allowed) if isinstance(allowed, list) else ""
+    blocked_text = ", ".join(str(item) for item in blocked) if isinstance(blocked, list) else ""
+    return (
+        "Security guardrails are strict. "
+        f"Allowed operation classes: {allowed_text}. "
+        f"Blocked command patterns: {blocked_text}. "
+        "Outbound actions (git push/PR publish/restart) require explicit approvals."
+    )
 
 
 def _normalize_identifier(value: object, fallback: str) -> str:
@@ -914,7 +1141,17 @@ def write_result_summary(
     )
 
 
-def append_nightly_log(repo: Path, status: str, diff_written: bool, scope_used: str) -> None:
+def append_nightly_log(
+    repo: Path,
+    status: str,
+    diff_written: bool,
+    scope_used: str,
+    *,
+    route_hit: bool | None = None,
+    qa_ok: bool | None = None,
+    prompt_tokens: int | None = None,
+    token_cost_usd: float | None = None,
+) -> None:
     log_path = repo / "memory" / "supervisor_nightly.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     record = {
@@ -923,8 +1160,112 @@ def append_nightly_log(repo: Path, status: str, diff_written: bool, scope_used: 
         "diff_written": bool(diff_written),
         "scope_used": scope_used,
     }
+    if route_hit is not None:
+        record["route_hit"] = bool(route_hit)
+    if qa_ok is not None:
+        record["qa_ok"] = bool(qa_ok)
+    if prompt_tokens is not None:
+        record["prompt_tokens"] = max(0, int(prompt_tokens))
+    if token_cost_usd is not None:
+        record["token_cost_usd"] = round(float(token_cost_usd), 6)
     with log_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _load_recent_nightly_records(repo: Path, window: int) -> list[dict]:
+    log_path = repo / "memory" / "supervisor_nightly.log"
+    if not log_path.exists():
+        return []
+    records: list[dict] = []
+    try:
+        lines = log_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines[-max(1, window):]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            records.append(parsed)
+    return records
+
+
+def compute_observability_alerts(repo: Path, config: dict) -> list[str]:
+    if not bool(config.get("enabled", True)):
+        return []
+    window = int(config.get("window", 20))
+    records = _load_recent_nightly_records(repo, window)
+    if not records:
+        return []
+
+    alerts: list[str] = []
+    total = len(records)
+
+    failures = 0
+    route_hits = 0
+    route_total = 0
+    prompt_token_values: list[int] = []
+    token_cost_values: list[float] = []
+
+    for record in records:
+        status = str(record.get("status", ""))
+        if any(marker in status for marker in FAILURE_STATUS_MARKERS):
+            failures += 1
+        if "route_hit" in record:
+            route_total += 1
+            if bool(record.get("route_hit", False)):
+                route_hits += 1
+        prompt_tokens = record.get("prompt_tokens")
+        if isinstance(prompt_tokens, int):
+            prompt_token_values.append(max(0, prompt_tokens))
+        token_cost = record.get("token_cost_usd")
+        if isinstance(token_cost, (int, float)):
+            token_cost_values.append(max(0.0, float(token_cost)))
+
+    failure_rate = failures / total if total else 0.0
+    if failure_rate > float(config.get("failure_rate_alert", 0.35)):
+        alerts.append(f"failure_rate={failure_rate:.2%} exceeded threshold")
+
+    if route_total > 0:
+        route_miss_rate = 1.0 - (route_hits / route_total)
+        if route_miss_rate > float(config.get("route_miss_rate_alert", 0.05)):
+            alerts.append(f"route_miss_rate={route_miss_rate:.2%} exceeded threshold")
+
+    if prompt_token_values:
+        avg_prompt_tokens = sum(prompt_token_values) / len(prompt_token_values)
+        if avg_prompt_tokens > int(config.get("prompt_token_budget", 2400)):
+            alerts.append(f"avg_prompt_tokens={avg_prompt_tokens:.0f} exceeded budget")
+
+    token_cost_alert = float(config.get("token_cost_alert_usd", 0.0))
+    if token_cost_values and token_cost_alert > 0.0:
+        avg_cost = sum(token_cost_values) / len(token_cost_values)
+        if avg_cost > token_cost_alert:
+            alerts.append(f"avg_token_cost_usd={avg_cost:.6f} exceeded budget")
+
+    return alerts
+
+
+def write_observability_alerts(agent_dir: Path, config: dict, alerts: list[str]) -> None:
+    path_raw = str(config.get("alerts_file", "agent/ALERTS.md"))
+    path = Path(path_raw)
+    if not path.is_absolute():
+        path = (agent_dir.parent / path).resolve()
+    if not alerts:
+        if path.exists():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        return
+    generated_at = datetime.now().isoformat(timespec="seconds")
+    lines = ["# Alerts", f"- generated_at: {generated_at}", "- source: supervisor_nightly.log"]
+    lines.extend(f"- {item}" for item in alerts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
 def record_check_result(
@@ -937,6 +1278,10 @@ def record_check_result(
     *,
     test_rc: int | None,
     write_diff: bool,
+    route_hit: bool,
+    prompt_tokens: int,
+    token_cost_usd: float,
+    observability_config: dict,
 ) -> None:
     verification_parts = []
     if test_rc is None:
@@ -971,7 +1316,13 @@ def record_check_result(
         ",".join(final_status_parts) if final_status_parts else "unknown",
         diff_written,
         scope_used,
+        route_hit=route_hit,
+        qa_ok=workspace_test_ok,
+        prompt_tokens=prompt_tokens,
+        token_cost_usd=token_cost_usd,
     )
+    alerts = compute_observability_alerts(repo, observability_config)
+    write_observability_alerts(agent_dir, observability_config, alerts)
 
 
 def loop(
@@ -994,6 +1345,8 @@ def loop(
     add_dirs = resolve_add_dirs(repo, cli_add_dirs)
     sync_target = resolve_sync_target(add_dirs)
     autopr = load_autopr_config(repo)
+    observability_config = resolve_observability_config(repo)
+    security_config = resolve_security_config(repo)
     second_brain_config = resolve_second_brain_config(repo)
     memory_namespace_config = resolve_memory_namespace_config(repo)
     second_brain_config["_namespace_enabled"] = bool(
@@ -1026,13 +1379,17 @@ def loop(
         if trigger:
             status = apply_trigger(repo, agent_dir, status_path, trigger)
         runtime_namespace = resolve_runtime_namespace(status, memory_namespace_config)
+        route_hit_for_run = True
         if (
             status.get("tenant_id") != runtime_namespace.get("tenant_id")
             or status.get("agent_id") != runtime_namespace.get("agent_id")
             or status.get("project_id") != runtime_namespace.get("project_id")
         ):
+            route_hit_for_run = False
             status = apply_namespace_to_status(status, runtime_namespace)
             save_status(status_path, status)
+        prompt_tokens_for_run = 0
+        token_cost_for_run = 0.0
         state = status.get("state", "idle")
 
         if state in ("done", "blocked"):
@@ -1057,6 +1414,10 @@ def loop(
                 status_parts=["max_attempts"],
                 test_rc=None,
                 write_diff=False,
+                route_hit=route_hit_for_run,
+                prompt_tokens=prompt_tokens_for_run,
+                token_cost_usd=token_cost_for_run,
+                observability_config=observability_config,
             )
             return
 
@@ -1091,6 +1452,10 @@ def loop(
                 status_parts=["sync_target_missing"],
                 test_rc=None,
                 write_diff=False,
+                route_hit=route_hit_for_run,
+                prompt_tokens=prompt_tokens_for_run,
+                token_cost_usd=token_cost_for_run,
+                observability_config=observability_config,
             )
             return
 
@@ -1110,6 +1475,21 @@ def loop(
         plan_before = plan_path.stat().st_mtime if plan_path.exists() else 0
         result_before = result_path.stat().st_mtime if result_path.exists() else 0
         second_brain_context = build_second_brain_context(repo, second_brain_config, runtime_namespace)
+        handoff_context = load_handoff_summary(agent_dir, max_items=3)
+        security_context = build_security_context(security_config)
+        if not host_sync_step:
+            prompt_preview = build_prompt(
+                step,
+                second_brain_context=second_brain_context,
+                namespace=runtime_namespace,
+                handoff_context=handoff_context,
+                security_context=security_context,
+            )
+            prompt_tokens_for_run = estimate_prompt_tokens(prompt_preview)
+            token_cost_for_run = round(
+                (prompt_tokens_for_run / 1000.0) * float(observability_config.get("token_cost_per_1k_usd", 0.0)),
+                6,
+            )
 
         if host_sync_step:
             codex_rc = run_host_sync(repo, sync_target or "", agent_dir, timeout_s=min(codex_timeout, 300))
@@ -1122,6 +1502,8 @@ def loop(
                 add_dirs=add_dirs,
                 second_brain_context=second_brain_context,
                 namespace=runtime_namespace,
+                handoff_context=handoff_context,
+                security_context=security_context,
             )
         else:
             codex_rc = run_codex_resume(
@@ -1130,6 +1512,8 @@ def loop(
                 step=step,
                 second_brain_context=second_brain_context,
                 namespace=runtime_namespace,
+                handoff_context=handoff_context,
+                security_context=security_context,
             )
         attempts += 1
 
@@ -1175,6 +1559,10 @@ def loop(
                     status_parts=["codex_timeout_progress"],
                     test_rc=None,
                     write_diff=False,
+                    route_hit=route_hit_for_run,
+                    prompt_tokens=prompt_tokens_for_run,
+                    token_cost_usd=token_cost_for_run,
+                    observability_config=observability_config,
                 )
                 if run_once:
                     return
@@ -1202,6 +1590,10 @@ def loop(
                 status_parts=["codex_timeout"],
                 test_rc=None,
                 write_diff=False,
+                route_hit=route_hit_for_run,
+                prompt_tokens=prompt_tokens_for_run,
+                token_cost_usd=token_cost_for_run,
+                observability_config=observability_config,
             )
             return
 
@@ -1227,6 +1619,10 @@ def loop(
                 status_parts=["codex_no_progress"],
                 test_rc=None,
                 write_diff=False,
+                route_hit=route_hit_for_run,
+                prompt_tokens=prompt_tokens_for_run,
+                token_cost_usd=token_cost_for_run,
+                observability_config=observability_config,
             )
             return
 
@@ -1260,6 +1656,10 @@ def loop(
                 status_parts=["sync_failed" if host_sync_step else "codex_failed"],
                 test_rc=None,
                 write_diff=False,
+                route_hit=route_hit_for_run,
+                prompt_tokens=prompt_tokens_for_run,
+                token_cost_usd=token_cost_for_run,
+                observability_config=observability_config,
             )
             return
 
@@ -1304,13 +1704,77 @@ def loop(
             status_parts=status_parts,
             test_rc=test_rc,
             write_diff=(test_rc == 0),
+            route_hit=route_hit_for_run,
+            prompt_tokens=prompt_tokens_for_run,
+            token_cost_usd=token_cost_for_run,
+            observability_config=observability_config,
         )
 
         if test_rc == 0:
             status = load_status(status_path)
             if status.get("state") == "done" and bool(autopr.get("enabled", False)):
+                approval_path = resolve_security_path(
+                    repo,
+                    security_config.get("approval_file", "agent/APPROVALS.json"),
+                )
+                audit_log_path = resolve_security_path(
+                    repo,
+                    security_config.get("audit_log", "logs/security_audit.jsonl"),
+                )
+                if bool(security_config.get("enabled", True)) and bool(
+                    security_config.get("require_autopr_approval", True)
+                ):
+                    if not is_action_approved(approval_path, "autopr"):
+                        append_audit_log(
+                            audit_log_path,
+                            event="autopr",
+                            outcome="denied",
+                            detail="missing approval for autopr",
+                            metadata={
+                                "approval_file": str(approval_path),
+                            },
+                        )
+                        status["state"] = "blocked"
+                        status["needs_human"] = True
+                        status["human_question"] = (
+                            "Auto-PR is blocked by security gate. "
+                            f"Approve action 'autopr' in {approval_path} then retry."
+                        )
+                        status["last_error_sig"] = "security_autopr_denied"
+                        save_status(status_path, status)
+                        record_check_result(
+                            repo,
+                            agent_dir,
+                            scope_used,
+                            completion="巡检结束：自动 PR 被安全门禁拦截，已标记为 blocked。",
+                            risks=status["human_question"],
+                            status_parts=["security_autopr_denied"],
+                            test_rc=None,
+                            write_diff=False,
+                            route_hit=route_hit_for_run,
+                            prompt_tokens=prompt_tokens_for_run,
+                            token_cost_usd=token_cost_for_run,
+                            observability_config=observability_config,
+                        )
+                        return
+                append_audit_log(
+                    audit_log_path,
+                    event="autopr",
+                    outcome="allowed",
+                    detail="security gate approved autopr",
+                    metadata={
+                        "approval_file": str(approval_path),
+                    },
+                )
                 autopr_rc, autopr_msg = run_autopr(repo, agent_dir, scope_used, autopr)
                 if autopr_rc != 0 and bool(autopr.get("required", False)):
+                    append_audit_log(
+                        audit_log_path,
+                        event="autopr",
+                        outcome="failed",
+                        detail=f"autopr failed with exit={autopr_rc}",
+                        metadata={"message": autopr_msg},
+                    )
                     status["state"] = "blocked"
                     status["needs_human"] = True
                     status["human_question"] = (
@@ -1328,6 +1792,10 @@ def loop(
                         status_parts=["autopr_failed"],
                         test_rc=None,
                         write_diff=False,
+                        route_hit=route_hit_for_run,
+                        prompt_tokens=prompt_tokens_for_run,
+                        token_cost_usd=token_cost_for_run,
+                        observability_config=observability_config,
                     )
                     return
 

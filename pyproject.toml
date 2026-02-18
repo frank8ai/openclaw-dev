@@ -1,6 +1,6 @@
 [project]
 name = "openclaw-dev"
-version = "2.4.0"
+version = "2.5.0"
 description = "OpenClaw + Codex autonomous development supervisor."
 requires-python = ">=3.8"
 

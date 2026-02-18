@@ -140,6 +140,13 @@ COLD_REF_JSON = """{
 }
 """
 
+APPROVALS_JSON = """{
+  "autopr": false,
+  "publish_external": false,
+  "service_restart": false
+}
+"""
+
 
 def ensure_openclaw_config(repo: Path, force: bool) -> None:
     config_path = repo / "openclaw.json"
@@ -260,6 +267,33 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
         autopr["body_file"] = "agent/RESULT.md"
     supervisor["autopr"] = autopr
 
+    security = supervisor.get("security")
+    if not isinstance(security, dict):
+        security = {}
+    if force or "enabled" not in security:
+        security["enabled"] = True
+    if force or "require_autopr_approval" not in security:
+        security["require_autopr_approval"] = True
+    if force or not isinstance(security.get("approval_file"), str):
+        security["approval_file"] = "agent/APPROVALS.json"
+    if force or not isinstance(security.get("audit_log"), str):
+        security["audit_log"] = "logs/security_audit.jsonl"
+    if force or not isinstance(security.get("allowed_operation_classes"), list):
+        security["allowed_operation_classes"] = [
+            "read_repo",
+            "edit_files",
+            "run_tests",
+            "sync_skill",
+        ]
+    if force or not isinstance(security.get("blocked_command_patterns"), list):
+        security["blocked_command_patterns"] = [
+            "rm -rf /",
+            "sudo ",
+            "curl http://",
+            "curl https://",
+        ]
+    supervisor["security"] = security
+
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -309,6 +343,7 @@ def main() -> None:
     write_file(agent_dir / "HOT.md", HOT_MD, args.force)
     write_file(agent_dir / "WARM.md", WARM_MD, args.force)
     write_file(agent_dir / "COLD.ref.json", COLD_REF_JSON, args.force)
+    write_file(agent_dir / "APPROVALS.json", APPROVALS_JSON, args.force)
 
     status_path = agent_dir / "STATUS.json"
     if not status_path.exists() or args.force:

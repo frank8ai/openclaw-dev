@@ -11,6 +11,9 @@
 - `agent/TASK.md`: 目标范围、里程碑、验收条件
 - `agent/POLICY.md`: 硬规则
 - `agent/STATUS.json`: 状态机
+- `agent/HANDOFF.json`: 标准化角色交接协议
+- `agent/APPROVALS.json`: 高风险外部动作审批清单
+- `agent/ALERTS.md`: 观测阈值告警输出
 - `agent/DECISIONS.md`: 人工审批与决策
 - `agent/RESULT.md`: 最终交付摘要
 - `agent/BLUEPRINT.json`: 确定性步骤
@@ -37,6 +40,7 @@
 ## 自愈策略
 - 质量门禁失败可自动重试（`--qa-retries`、`--qa-retry-sleep`）后再判定失败。
 - 超时/无进展会写入 `STATUS.last_error_sig`，并给出明确 blocked 处理动作。
+- 观测指标持续写入 `memory/supervisor_nightly.log`，阈值超限自动生成 `agent/ALERTS.md`。
 
 ## 上下文策略（低 token）
 - 默认使用 HOT/WARM + 错误尾部摘要。
@@ -48,3 +52,4 @@
 ## 可选发布自动化
 - 开启 `supervisor.autopr` 后，`STATUS=done` 且门禁通过时可自动建分支/提交/PR。
 - `mode=dev` 可启用 `auto_merge`，`staging/prod` 建议保持人工审批。
+- 当 `supervisor.security.require_autopr_approval=true` 时，`agent/APPROVALS.json` 未授权会拦截 Auto-PR。

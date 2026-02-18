@@ -29,6 +29,34 @@
       "daily_index_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/daily/{date}/_DAILY_INDEX.md",
       "session_glob_template": "brain/tenants/{tenant_id}/agents/{agent_id}/projects/{project_id}/sessions/session_*.md"
     },
+    "observability": {
+      "enabled": true,
+      "window": 20,
+      "failure_rate_alert": 0.35,
+      "route_miss_rate_alert": 0.05,
+      "prompt_token_budget": 2400,
+      "token_cost_per_1k_usd": 0.0,
+      "token_cost_alert_usd": 0.0,
+      "alerts_file": "agent/ALERTS.md"
+    },
+    "security": {
+      "enabled": true,
+      "require_autopr_approval": true,
+      "approval_file": "agent/APPROVALS.json",
+      "audit_log": "logs/security_audit.jsonl",
+      "allowed_operation_classes": [
+        "read_repo",
+        "edit_files",
+        "run_tests",
+        "sync_skill"
+      ],
+      "blocked_command_patterns": [
+        "rm -rf /",
+        "sudo ",
+        "curl http://",
+        "curl https://"
+      ]
+    },
     "autopr": {
       "enabled": false,
       "required": false,

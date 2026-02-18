@@ -75,9 +75,14 @@ For these sync steps, supervisor also bypasses the Codex no-progress fallback pa
 
 ### 4.1) Event-driven immediate trigger
 ```bash
-python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary" --tenant-id default --agent-id assistant-main --project-id your-repo --dedup-seconds 90
+python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary" --handoff-from commander --handoff-to engineer --tenant-id default --agent-id assistant-main --project-id your-repo --dedup-seconds 90
 ```
 This writes `agent/TRIGGER.json`, optionally updates `agent/TASK.md`, and kickstarts launchd.
+
+Validate explicit handoff file before trigger:
+```bash
+python3 scripts/handoff_protocol.py validate --file /path/to/HANDOFF.json
+```
 
 ### 4.2) Optional auto-PR after done
 Configure in `openclaw.json`:
@@ -124,6 +129,18 @@ python3 scripts/memory_namespace.py --root .. --tenant-id default --agent-id ass
 ```
 Use `resolve` subcommand to inspect paths without writes.
 
+### 4.5) Observability report
+```bash
+python3 scripts/observability_report.py --repo /path/to/repo --json
+```
+Supervisor writes route/failure/token metrics to `memory/supervisor_nightly.log` and emits `agent/ALERTS.md` on threshold breaches.
+
+### 4.6) Security approvals
+```bash
+python3 scripts/security_gate.py --file /path/to/repo/agent/APPROVALS.json approve --action autopr
+```
+If `supervisor.security.require_autopr_approval=true`, Auto-PR requires this approval.
+
 ### 5) Handle blocked decisions
 If `agent/STATUS.json` is `blocked`, answer the item in `agent/DECISIONS.md`, then resume.
 
@@ -145,6 +162,9 @@ Completion requires:
 - `scripts/init_openclaw_dev.py` — create agent/ files + templates.
 - `scripts/supervisor_loop.py` — resume Codex, run tests, update status.
 - `scripts/trigger_supervisor.py` — event-trigger run and optionally reset current step.
+- `scripts/handoff_protocol.py` — generate/validate/summarize standardized handoff JSON.
+- `scripts/observability_report.py` — summarize observability metrics and alerts.
+- `scripts/security_gate.py` — approvals and audit helper for outbound actions.
 - `scripts/memory_namespace.py` — namespace resolver/bootstrap for isolated memory directories.
 - `scripts/autopr.py` — automated branch/commit/PR/auto-merge helper.
 

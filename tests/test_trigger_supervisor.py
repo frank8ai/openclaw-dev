@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from tests.load_script import load_script_module
 
@@ -22,20 +23,26 @@ def test_upsert_goal_inserts_when_missing() -> None:
 
 
 def test_trigger_fingerprint_is_stable() -> None:
-    left = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a")
-    right = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a")
+    left = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-1")
+    right = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-1")
     assert left == right
 
 
 def test_trigger_fingerprint_changes_when_namespace_changes() -> None:
-    left = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a")
-    right = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-b")
+    left = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-1")
+    right = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-b", "h-1")
+    assert left != right
+
+
+def test_trigger_fingerprint_changes_when_handoff_changes() -> None:
+    left = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-1")
+    right = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-2")
     assert left != right
 
 
 def test_should_skip_duplicate_true(tmp_path: Path) -> None:
     trigger_path = tmp_path / "TRIGGER.json"
-    fp = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a")
+    fp = trigger_supervisor.trigger_fingerprint("manual", "Task A", True, "default", "main", "proj-a", "h-1")
     payload = {
         "fingerprint": fp,
         "requested_at_epoch": int(trigger_supervisor.datetime.now().timestamp()),
@@ -46,3 +53,17 @@ def test_should_skip_duplicate_true(tmp_path: Path) -> None:
 
 def test_normalize_identifier() -> None:
     assert trigger_supervisor.normalize_identifier(" Team Alpha ", "default") == "team-alpha"
+
+
+def test_resolve_handoff_payload_from_task() -> None:
+    args = SimpleNamespace(
+        handoff_file="",
+        task="Implement feature x",
+        handoff_from="requester",
+        handoff_to="",
+        reason="manual",
+    )
+    payload, errors = trigger_supervisor.resolve_handoff_payload(args, "engineer")
+    assert not errors
+    assert isinstance(payload, dict)
+    assert payload.get("to_agent") == "engineer"

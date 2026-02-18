@@ -8,6 +8,9 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `scripts/supervisor_loop.py`: resumes Codex work, runs tests, and updates `agent/STATUS.json`.
 - `scripts/run_supervisor_daemon.sh`: wrapper for unattended long-running supervisor execution.
 - `scripts/trigger_supervisor.py`: event-driven trigger (optional task update + launchd kickstart).
+- `scripts/handoff_protocol.py`: standardized JSON handoff contract (template/validate/summarize).
+- `scripts/observability_report.py`: observability summary and alert report from supervisor logs.
+- `scripts/security_gate.py`: approval/audit controls for outbound high-risk actions.
 - `scripts/memory_namespace.py`: namespace resolver/bootstrap for tenant-agent-project memory isolation.
 - `scripts/autopr.py`: optional branch/commit/PR/auto-merge automation.
 - `scripts/sync_to_skill.py`: host-side sync from repo to local skill copy.
@@ -70,7 +73,15 @@ In sync steps, supervisor skips Codex no-progress fallback, so it will not rewri
 python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
   --repo /path/to/your-repo \
   --reason "new-task" \
-  --task "Implement feature X"
+  --task "Implement feature X" \
+  --handoff-from commander \
+  --handoff-to engineer
+```
+
+Optional: validate an explicit handoff file before trigger:
+```bash
+python3 /path/to/openclaw-dev/scripts/handoff_protocol.py validate \
+  --file /path/to/HANDOFF.json
 ```
 
 7) Optional full automation after gate pass (Auto-PR):
@@ -123,6 +134,21 @@ python3 /path/to/openclaw-dev/scripts/memory_namespace.py \
 ```
 Use `resolve` subcommand to inspect effective paths without writing files.
 
+10) Observability and alert report:
+```bash
+python3 /path/to/openclaw-dev/scripts/observability_report.py \
+  --repo /path/to/your-repo --json
+```
+The supervisor writes rolling metrics to `memory/supervisor_nightly.log` and emits `agent/ALERTS.md` when thresholds are exceeded.
+
+11) Security approvals for outbound actions:
+```bash
+python3 /path/to/openclaw-dev/scripts/security_gate.py \
+  --file /path/to/your-repo/agent/APPROVALS.json \
+  approve --action autopr
+```
+When `supervisor.security.require_autopr_approval=true`, Auto-PR requires this approval.
+
 ## Iter-2 utilities
 - `scripts/para_recall.py`: lightweight memory recall over `memory/`.
   - Example: `python3 scripts/para_recall.py --query "focus areas" --trace logs/retrieval_trace.jsonl`
@@ -149,7 +175,7 @@ make review
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 
 ## Version
-- `VERSION` file and Git tag `v2.4.0`.
+- `VERSION` file and Git tag `v2.5.0`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.
