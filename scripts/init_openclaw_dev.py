@@ -158,6 +158,12 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
     if force or not isinstance(supervisor.get("default_scope"), str) or not supervisor["default_scope"].strip():
         supervisor["default_scope"] = "."
 
+    if force or not isinstance(supervisor.get("qa_retries"), int):
+        supervisor["qa_retries"] = 1
+
+    if force or not isinstance(supervisor.get("qa_retry_sleep"), int):
+        supervisor["qa_retry_sleep"] = 5
+
     add_dirs = supervisor.get("add_dirs")
     if not isinstance(add_dirs, list):
         add_dirs = []
@@ -171,6 +177,29 @@ def ensure_openclaw_config(repo: Path, force: bool) -> None:
             add_dirs.append(mirror_rel)
 
     supervisor["add_dirs"] = add_dirs
+
+    autopr = supervisor.get("autopr")
+    if not isinstance(autopr, dict):
+        autopr = {}
+    if force or "enabled" not in autopr:
+        autopr["enabled"] = False
+    if force or "required" not in autopr:
+        autopr["required"] = False
+    if force or not isinstance(autopr.get("mode"), str):
+        autopr["mode"] = "dev"
+    if force or not isinstance(autopr.get("base"), str):
+        autopr["base"] = "master"
+    if force or not isinstance(autopr.get("branch_prefix"), str):
+        autopr["branch_prefix"] = "autodev"
+    if force or "auto_merge" not in autopr:
+        autopr["auto_merge"] = False
+    if force or not isinstance(autopr.get("commit_message"), str):
+        autopr["commit_message"] = "chore: automated supervisor delivery"
+    if force or not isinstance(autopr.get("title"), str):
+        autopr["title"] = "chore: automated supervisor delivery"
+    if force or not isinstance(autopr.get("body_file"), str):
+        autopr["body_file"] = "agent/RESULT.md"
+    supervisor["autopr"] = autopr
 
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

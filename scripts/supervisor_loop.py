@@ -22,6 +22,9 @@ RESULT_TEMPLATE = """# Result
 - 风险点：{risks}
 """
 DEFAULT_SCOPE = "."
+TRIGGER_FILE = "TRIGGER.json"
+DEFAULT_QA_RETRIES = 1
+DEFAULT_QA_RETRY_SLEEP = 5
 
 
 def load_status(path: Path) -> dict:
@@ -59,6 +62,88 @@ def run_tests(agent_dir: Path) -> int:
         ),
     ]
     return run_cmd(cmd, agent_dir.parent)
+
+
+def run_tests_with_retry(agent_dir: Path, retries: int, retry_sleep: int) -> tuple[int, int]:
+    attempts = 0
+    while True:
+        attempts += 1
+        rc = run_tests(agent_dir)
+        if rc == 0:
+            return rc, attempts
+        if attempts > retries:
+            return rc, attempts
+        time.sleep(max(0, retry_sleep))
+
+
+def _upsert_task_goal(task_path: Path, goal: str) -> None:
+    if not goal.strip():
+        return
+    original = task_path.read_text(encoding="utf-8") if task_path.exists() else "# Task\n"
+    lines = original.splitlines()
+    value = goal.strip()
+    updated = False
+    for index, line in enumerate(lines):
+        if line.startswith("目标："):
+            lines[index] = f"目标：{value}"
+            updated = True
+            break
+        if line.lower().startswith("goal:"):
+            lines[index] = f"Goal: {value}"
+            updated = True
+            break
+    if not updated:
+        if lines and lines[0].startswith("#"):
+            lines.insert(1, f"目标：{value}")
+        else:
+            lines.insert(0, f"目标：{value}")
+    task_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def load_trigger_payload(agent_dir: Path) -> dict:
+    trigger_path = agent_dir / TRIGGER_FILE
+    if not trigger_path.exists():
+        return {}
+    payload: dict = {}
+    try:
+        parsed = json.loads(trigger_path.read_text(encoding="utf-8"))
+        if isinstance(parsed, dict):
+            payload = parsed
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    try:
+        trigger_path.unlink()
+    except OSError:
+        pass
+    return payload
+
+
+def apply_trigger(repo: Path, agent_dir: Path, status_path: Path, payload: dict) -> dict:
+    status = load_status(status_path)
+    goal = payload.get("task")
+    if isinstance(goal, str) and goal.strip():
+        _upsert_task_goal(agent_dir / "TASK.md", goal)
+
+    reset_step = payload.get("reset_step")
+    if not isinstance(reset_step, bool):
+        reset_step = True
+
+    status["state"] = "idle"
+    status["needs_human"] = False
+    status["human_question"] = ""
+    status["last_error_sig"] = "triggered"
+    status["last_action"] = "triggered_run"
+    if reset_step:
+        status["current_step"] = 1
+        status["checkpoint_id"] = ""
+
+    reason = payload.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        status["trigger_reason"] = reason.strip()
+
+    save_status(status_path, status)
+    append_nightly_log(repo, "triggered", diff_written=False, scope_used=DEFAULT_SCOPE)
+    return status
 
 
 def build_prompt(step: dict | None) -> str:
@@ -222,6 +307,29 @@ def resolve_scope(repo: Path, scope_arg: str | None) -> str:
     return DEFAULT_SCOPE
 
 
+def resolve_qa_settings(
+    repo: Path,
+    qa_retries_arg: int | None,
+    qa_retry_sleep_arg: int | None,
+) -> tuple[int, int]:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    retries = DEFAULT_QA_RETRIES
+    retry_sleep = DEFAULT_QA_RETRY_SLEEP
+    if isinstance(supervisor, dict):
+        configured_retries = supervisor.get("qa_retries")
+        configured_retry_sleep = supervisor.get("qa_retry_sleep")
+        if isinstance(configured_retries, int):
+            retries = configured_retries
+        if isinstance(configured_retry_sleep, int):
+            retry_sleep = configured_retry_sleep
+    if qa_retries_arg is not None:
+        retries = qa_retries_arg
+    if qa_retry_sleep_arg is not None:
+        retry_sleep = qa_retry_sleep_arg
+    return max(0, retries), max(0, retry_sleep)
+
+
 def _resolve_add_dir(repo: Path, raw: str) -> str | None:
     candidate = Path(raw).expanduser()
     if not candidate.is_absolute():
@@ -262,6 +370,113 @@ def resolve_add_dirs(repo: Path, cli_add_dirs: list[str] | None) -> list[str]:
         seen.add(resolved)
         deduped.append(resolved)
     return deduped
+
+
+def load_autopr_config(repo: Path) -> dict:
+    config = load_supervisor_config(repo)
+    supervisor = config.get("supervisor", {})
+    autopr = {}
+    if isinstance(supervisor, dict):
+        raw = supervisor.get("autopr")
+        if isinstance(raw, dict):
+            autopr = raw
+
+    mode = autopr.get("mode", "dev")
+    if mode not in ("dev", "staging", "prod"):
+        mode = "dev"
+    enabled = bool(autopr.get("enabled", False))
+    required = bool(autopr.get("required", False))
+    auto_merge = bool(autopr.get("auto_merge", False))
+
+    base = autopr.get("base", "master")
+    if not isinstance(base, str) or not base.strip():
+        base = "master"
+
+    branch_prefix = autopr.get("branch_prefix", "autodev")
+    if not isinstance(branch_prefix, str) or not branch_prefix.strip():
+        branch_prefix = "autodev"
+
+    commit_message = autopr.get("commit_message", "chore: automated supervisor delivery")
+    if not isinstance(commit_message, str) or not commit_message.strip():
+        commit_message = "chore: automated supervisor delivery"
+
+    title = autopr.get("title", "chore: automated supervisor delivery")
+    if not isinstance(title, str) or not title.strip():
+        title = "chore: automated supervisor delivery"
+
+    body_file = autopr.get("body_file", "agent/RESULT.md")
+    if not isinstance(body_file, str) or not body_file.strip():
+        body_file = "agent/RESULT.md"
+
+    return {
+        "enabled": enabled,
+        "required": required,
+        "mode": mode,
+        "base": base.strip(),
+        "branch_prefix": branch_prefix.strip(),
+        "commit_message": commit_message.strip(),
+        "title": title.strip(),
+        "body_file": body_file.strip(),
+        "auto_merge": auto_merge and mode == "dev",
+    }
+
+
+def run_autopr(
+    repo: Path,
+    agent_dir: Path,
+    scope_used: str,
+    config: dict,
+) -> tuple[int, str]:
+    script = repo / "scripts" / "autopr.py"
+    if not script.exists():
+        return 127, "autopr.py missing"
+
+    cmd = [
+        sys.executable,
+        str(script),
+        "--repo",
+        str(repo),
+        "--scope",
+        scope_used,
+        "--base",
+        str(config.get("base", "master")),
+        "--branch-prefix",
+        str(config.get("branch_prefix", "autodev")),
+        "--title",
+        str(config.get("title", "chore: automated supervisor delivery")),
+        "--commit-message",
+        str(config.get("commit_message", "chore: automated supervisor delivery")),
+        "--mode",
+        str(config.get("mode", "dev")),
+        "--body-file",
+        str(config.get("body_file", "agent/RESULT.md")),
+    ]
+    if bool(config.get("auto_merge", False)):
+        cmd.append("--auto-merge")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(repo),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        (agent_dir / "autopr_tail.log").write_text("autopr.py timed out\n", encoding="utf-8")
+        return 124, "autopr.py timed out"
+
+    output = "\n".join(
+        part for part in ((proc.stdout or "").strip(), (proc.stderr or "").strip()) if part
+    )
+    tail = output.splitlines()[-150:] if output else []
+    (agent_dir / "autopr_tail.log").write_text(
+        ("\n".join(tail) + "\n") if tail else "autopr.py produced no output\n",
+        encoding="utf-8",
+    )
+    message = tail[-1] if tail else "autopr.py finished"
+    return proc.returncode, message
 
 
 def resolve_sync_target(add_dirs: list[str]) -> str | None:
@@ -495,12 +710,15 @@ def loop(
     cli_add_dirs: list[str] | None,
     max_attempts: int,
     attempt_sleep: int,
+    qa_retries: int,
+    qa_retry_sleep: int,
 ) -> None:
     agent_dir = repo / "agent"
     status_path = agent_dir / "STATUS.json"
     scope_used = resolve_scope(repo, scope_arg)
     add_dirs = resolve_add_dirs(repo, cli_add_dirs)
     sync_target = resolve_sync_target(add_dirs)
+    autopr = load_autopr_config(repo)
     primary_codex_dir = str((Path.home() / ".codex").resolve())
     has_external_add_dirs = any(Path(path).resolve() != Path(primary_codex_dir).resolve() for path in add_dirs)
     if not agent_dir.exists():
@@ -511,6 +729,9 @@ def loop(
 
     while True:
         status = load_status(status_path)
+        trigger = load_trigger_payload(agent_dir)
+        if trigger:
+            status = apply_trigger(repo, agent_dir, status_path, trigger)
         state = status.get("state", "idle")
 
         if state in ("done", "blocked"):
@@ -736,8 +957,9 @@ def loop(
             )
             return
 
-        test_rc = run_tests(agent_dir)
+        test_rc, test_attempts = run_tests_with_retry(agent_dir, qa_retries, qa_retry_sleep)
         status["last_test_ok"] = (test_rc == 0)
+        status["last_test_attempts"] = test_attempts
         if status.get("state") not in ("blocked", "done"):
             status["state"] = "idle"
         save_status(status_path, status)
@@ -750,12 +972,18 @@ def loop(
             if step_allows_checkpoint(step):
                 status["checkpoint_id"] = write_checkpoint(agent_dir, step)
             status["current_step"] = int(status.get("current_step", 1)) + 1
+            if get_step(blueprint, int(status["current_step"])) is None and status.get("state") != "blocked":
+                status["state"] = "done"
             save_status(status_path, status)
 
         if test_rc == 0:
             completion = "巡检完成：codex 执行成功，质量门禁通过。"
-            risks = "无"
-            status_parts = ["codex_ok", "tests_ok"]
+            if test_attempts > 1:
+                risks = f"QA_CMD/TEST_CMD flaky recovered after {test_attempts} attempts."
+                status_parts = ["codex_ok", "tests_ok", "tests_retried"]
+            else:
+                risks = "无"
+                status_parts = ["codex_ok", "tests_ok"]
         else:
             completion = "巡检完成：codex 执行成功，但质量门禁未通过。"
             risks = "QA_CMD/TEST_CMD 未通过，需继续修复。"
@@ -771,6 +999,31 @@ def loop(
             test_rc=test_rc,
             write_diff=(test_rc == 0),
         )
+
+        if test_rc == 0:
+            status = load_status(status_path)
+            if status.get("state") == "done" and bool(autopr.get("enabled", False)):
+                autopr_rc, autopr_msg = run_autopr(repo, agent_dir, scope_used, autopr)
+                if autopr_rc != 0 and bool(autopr.get("required", False)):
+                    status["state"] = "blocked"
+                    status["needs_human"] = True
+                    status["human_question"] = (
+                        f"Auto-PR failed with exit={autopr_rc}. {autopr_msg}. "
+                        "Inspect agent/autopr_tail.log."
+                    )
+                    status["last_error_sig"] = "autopr_failed"
+                    save_status(status_path, status)
+                    record_check_result(
+                        repo,
+                        agent_dir,
+                        scope_used,
+                        completion="巡检结束：自动 PR 失败，已标记为 blocked。",
+                        risks=status["human_question"],
+                        status_parts=["autopr_failed"],
+                        test_rc=None,
+                        write_diff=False,
+                    )
+                    return
 
         if run_once:
             return
@@ -789,6 +1042,18 @@ def main() -> None:
         help="Max Codex attempts before marking blocked.",
     )
     parser.add_argument("--attempt-sleep", type=int, default=20, help="Seconds to sleep between retries.")
+    parser.add_argument(
+        "--qa-retries",
+        type=int,
+        default=None,
+        help="Retry count for QA_CMD/TEST_CMD before marking test failure.",
+    )
+    parser.add_argument(
+        "--qa-retry-sleep",
+        type=int,
+        default=None,
+        help="Seconds between QA retries.",
+    )
     parser.add_argument("--full-auto", action="store_true")
     parser.add_argument("--start", action="store_true", help="Force a fresh codex exec")
     parser.add_argument(
@@ -809,9 +1074,11 @@ def main() -> None:
         help="Git scope used for diff/risk summary. Defaults to openclaw.json supervisor.default_scope.",
     )
     args = parser.parse_args()
+    repo = Path(args.repo).expanduser().resolve()
+    qa_retries, qa_retry_sleep = resolve_qa_settings(repo, args.qa_retries, args.qa_retry_sleep)
 
     loop(
-        Path(args.repo).expanduser().resolve(),
+        repo,
         args.interval,
         args.run_once,
         args.full_auto,
@@ -821,6 +1088,8 @@ def main() -> None:
         args.add_dir,
         args.max_attempts,
         args.attempt_sleep,
+        qa_retries,
+        qa_retry_sleep,
     )
 
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0
+- Add event-driven supervisor trigger via `scripts/trigger_supervisor.py` (`agent/TRIGGER.json` + optional launchd kickstart).
+- Add QA self-healing retries (`--qa-retries`, `--qa-retry-sleep`) and config defaults in `openclaw.json`.
+- Add optional auto-PR pipeline via `scripts/autopr.py` and `supervisor.autopr` config.
+- Update supervisor workflow/docs for unattended automation, release mode guidance, and CI definition clarity.
+
 ## 2.1.1
 - Add `scripts/run_supervisor_daemon.sh` for unattended long-running supervisor execution.
 - Document macOS `launchd` deployment and restart workflow in `docs/USAGE.md` and `docs/USAGE_CN.md`.

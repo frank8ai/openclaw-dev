@@ -7,6 +7,8 @@ OpenClaw + Codex CLI 的自动化开发工作流，目标是让交付流程可�
 - `scripts/init_openclaw_dev.py`: 在目标仓库初始化 `agent/` 模板。
 - `scripts/supervisor_loop.py`: 循环驱动 Codex 执行/续跑，并更新 `agent/STATUS.json`。
 - `scripts/run_supervisor_daemon.sh`: 用于本机无人值守常驻执行 supervisor 的封装脚本。
+- `scripts/trigger_supervisor.py`: 事件触发执行（可附带新任务并 kickstart launchd）。
+- `scripts/autopr.py`: 可选的自动分支/提交/PR/自动合并脚本。
 - `scripts/sync_to_skill.py`: 在主机侧同步文件到本地 skill 副本目录。
 - `references/agent_templates.md`: `agent/` 模板参考。
 
@@ -35,6 +37,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
 
 如需本机无人值守常驻运行（macOS `launchd`），见 `docs/USAGE_CN.md` 的 `3.4` 节。
 
+CI（持续集成）= 每次 push / PR 自动执行 lint、typecheck、tests、eval、security、review。
+
 ## 跨目录同步（推荐配置）
 如果任务需要写到仓库外目录（例如 `../skills/openclaw-dev`），在 `openclaw.json` 中配置：
 ```json
@@ -60,6 +64,30 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 ```
 
 说明：当蓝图步骤目标同时包含 `sync` 与 `skill` 时，supervisor 会走 host sync 路径，并跳过 Codex 无进展兜底逻辑，避免无关改写 `agent/PLAN.md` / `agent/HOT.md`。
+
+你也可以立即事件触发一次执行（不等 interval）：
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo \
+  --reason "new-task" \
+  --task "实现功能 X"
+```
+
+可选：通过 `openclaw.json` 开启自动 PR：
+```json
+{
+  "supervisor": {
+    "autopr": {
+      "enabled": true,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": true
+    }
+  }
+}
+```
+需要本机已安装并登录 `gh` CLI。
 
 ## 质量门禁
 一键执行全部门禁：

@@ -7,6 +7,8 @@ Autonomous OpenClaw + Codex CLI development workflow that enforces spec-driven e
 - `scripts/init_openclaw_dev.py`: initializes `agent/` templates in any target repo.
 - `scripts/supervisor_loop.py`: resumes Codex work, runs tests, and updates `agent/STATUS.json`.
 - `scripts/run_supervisor_daemon.sh`: wrapper for unattended long-running supervisor execution.
+- `scripts/trigger_supervisor.py`: event-driven trigger (optional task update + launchd kickstart).
+- `scripts/autopr.py`: optional branch/commit/PR/auto-merge automation.
 - `scripts/sync_to_skill.py`: host-side sync from repo to local skill copy.
 - `references/agent_templates.md`: canonical templates for `agent/` files.
 - Deterministic `agent/BLUEPRINT.json` and minimal-context `agent/HOT.md`/`agent/WARM.md`.
@@ -35,6 +37,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
 
 For unattended local deployment (macOS `launchd`), see `docs/USAGE.md` section `3.4`.
 
+CI = Continuous Integration: every push/PR runs lint/typecheck/tests/eval/security/review automatically.
+
 4) If your task must write outside repo (e.g. sync to sibling skill dir), declare writable dirs:
 ```json
 {
@@ -58,6 +62,31 @@ python3 /path/to/openclaw-dev/scripts/sync_to_skill.py \
 ```
 The supervisor will auto-use this script for sync steps when objective contains `sync` + `skill`.
 In sync steps, supervisor skips Codex no-progress fallback, so it will not rewrite `agent/PLAN.md`/`agent/HOT.md` unexpectedly.
+
+6) Event-trigger a run immediately (no need to wait for interval):
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo \
+  --reason "new-task" \
+  --task "Implement feature X"
+```
+
+7) Optional full automation after gate pass (Auto-PR):
+`openclaw.json`
+```json
+{
+  "supervisor": {
+    "autopr": {
+      "enabled": true,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": true
+    }
+  }
+}
+```
+Requires `gh` CLI and authenticated GitHub session.
 
 ## Iter-2 utilities
 - `scripts/para_recall.py`: lightweight memory recall over `memory/`.
@@ -85,7 +114,7 @@ make review
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 
 ## Version
-- `VERSION` file and Git tag `v2.1.1`.
+- `VERSION` file and Git tag `v2.2.0`.
 
 ## Notes
 - This workflow is intentionally minimal-token: long logs stay on disk, not in chat.

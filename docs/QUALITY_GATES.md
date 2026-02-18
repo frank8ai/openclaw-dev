@@ -2,6 +2,7 @@
 
 ## Goal
 Create a deterministic release gate for `openclaw-dev` so delivery quality does not depend on manual judgment.
+CI (Continuous Integration) in this repo means every `push`/`pull_request` runs all quality gates automatically.
 
 ## Three-Tier Standard
 1. **Tier-A (Correctness)**

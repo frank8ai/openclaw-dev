@@ -31,7 +31,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
 python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --repo /path/to/your-repo \
   --interval 1800 --full-auto \
-  --codex-timeout 300 --max-attempts 12
+  --codex-timeout 300 --max-attempts 12 \
+  --qa-retries 1 --qa-retry-sleep 5
 ```
 
 ## 3.1) 需要跨仓库写入时
@@ -93,6 +94,8 @@ OPENCLAW_TARGET_REPO=/path/to/your-repo \
       <key>OPENCLAW_SUPERVISOR_INTERVAL</key><string>1800</string>
       <key>OPENCLAW_CODEX_TIMEOUT</key><string>300</string>
       <key>OPENCLAW_MAX_ATTEMPTS</key><string>12</string>
+      <key>OPENCLAW_QA_RETRIES</key><string>1</string>
+      <key>OPENCLAW_QA_RETRY_SLEEP</key><string>5</string>
     </dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
@@ -109,6 +112,37 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervis
 launchctl kickstart -k gui/$(id -u)/ai.openclaw.dev.supervisor
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
 ```
+
+## 3.5) 事件触发立即执行
+当有新任务时，可立即触发，不必等待 interval：
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo \
+  --reason "new-task" \
+  --task "实现功能 X"
+```
+默认会尝试对 `com.openclaw.dev-supervisor` 执行 `launchctl kickstart`。
+
+## 3.6) 可选自动 PR 流水线
+在 `openclaw.json` 启用：
+```json
+{
+  "supervisor": {
+    "autopr": {
+      "enabled": true,
+      "required": false,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": true,
+      "commit_message": "chore: automated supervisor delivery",
+      "title": "chore: automated supervisor delivery",
+      "body_file": "agent/RESULT.md"
+    }
+  }
+}
+```
+需要本机已登录 `gh` CLI。
 
 ## 4) 处理人工决策
 当 `agent/STATUS.json.state = blocked` 时，查看 `agent/DECISIONS.md` 并回答后再继续：

@@ -5,6 +5,7 @@
 - Minimal-token supervision
 - Quality-gated acceptance
 - Durable status files
+- Event-driven wakeup + unattended operations
 
 ## Core files
 - `agent/TASK.md`: scope, milestones, acceptance
@@ -31,3 +32,12 @@
 ## Suggested cadence
 - First run: `--run-once --start --full-auto`
 - Overnight: `--interval 1800 --full-auto`
+- Event task arrival: `trigger_supervisor.py` + launchd kickstart
+
+## Self-healing
+- QA failures can retry automatically (`--qa-retries`, `--qa-retry-sleep`) before marking failed.
+- Timeouts/no-progress are tracked in `STATUS.last_error_sig` and routed to blocked with clear actions.
+
+## Optional release automation
+- Enable `supervisor.autopr` to create branch/commit/PR automatically after `STATUS=done` and gates pass.
+- `mode=dev` allows `auto_merge`; `staging/prod` should keep manual approval.

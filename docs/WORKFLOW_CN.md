@@ -5,6 +5,7 @@
 - 低 token 监督
 - 质量门禁验收
 - 状态文件可追踪
+- 事件触发 + 无人值守
 
 ## 核心文件
 - `agent/TASK.md`: 目标范围、里程碑、验收条件
@@ -30,3 +31,12 @@
 ## 建议节奏
 - 首次运行：`--run-once --start --full-auto`
 - 持续巡检：`--interval 1800 --full-auto`
+- 新任务到达：`trigger_supervisor.py` + launchd kickstart
+
+## 自愈策略
+- 质量门禁失败可自动重试（`--qa-retries`、`--qa-retry-sleep`）后再判定失败。
+- 超时/无进展会写入 `STATUS.last_error_sig`，并给出明确 blocked 处理动作。
+
+## 可选发布自动化
+- 开启 `supervisor.autopr` 后，`STATUS=done` 且门禁通过时可自动建分支/提交/PR。
+- `mode=dev` 可启用 `auto_merge`，`staging/prod` 建议保持人工审批。

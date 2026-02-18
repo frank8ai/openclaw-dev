@@ -31,7 +31,8 @@ python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
 python3 /path/to/openclaw-dev/scripts/supervisor_loop.py \
   --repo /path/to/your-repo \
   --interval 1800 --full-auto \
-  --codex-timeout 300 --max-attempts 12
+  --codex-timeout 300 --max-attempts 12 \
+  --qa-retries 1 --qa-retry-sleep 5
 ```
 
 ## 3.1) Allow cross-repo writes when needed
@@ -92,6 +93,8 @@ Create `~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist`:
       <key>OPENCLAW_SUPERVISOR_INTERVAL</key><string>1800</string>
       <key>OPENCLAW_CODEX_TIMEOUT</key><string>300</string>
       <key>OPENCLAW_MAX_ATTEMPTS</key><string>12</string>
+      <key>OPENCLAW_QA_RETRIES</key><string>1</string>
+      <key>OPENCLAW_QA_RETRY_SLEEP</key><string>5</string>
     </dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
@@ -108,6 +111,37 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervis
 launchctl kickstart -k gui/$(id -u)/ai.openclaw.dev.supervisor
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/ai.openclaw.dev.supervisor.plist
 ```
+
+## 3.5) Event-driven run trigger
+When a new task arrives, trigger an immediate run instead of waiting for interval:
+```bash
+python3 /path/to/openclaw-dev/scripts/trigger_supervisor.py \
+  --repo /path/to/your-repo \
+  --reason "new-task" \
+  --task "Implement feature X"
+```
+By default it also runs `launchctl kickstart` on `com.openclaw.dev-supervisor`.
+
+## 3.6) Optional Auto-PR pipeline
+Enable in `openclaw.json`:
+```json
+{
+  "supervisor": {
+    "autopr": {
+      "enabled": true,
+      "required": false,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": true,
+      "commit_message": "chore: automated supervisor delivery",
+      "title": "chore: automated supervisor delivery",
+      "body_file": "agent/RESULT.md"
+    }
+  }
+}
+```
+Requires `gh` CLI authentication.
 
 ## 4) Handle decisions
 When `agent/STATUS.json.state = blocked`, check `agent/DECISIONS.md` and answer the questions, then resume:

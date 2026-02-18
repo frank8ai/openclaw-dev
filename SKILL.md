@@ -51,7 +51,7 @@ python3 scripts/supervisor_loop.py --repo /path/to/repo --run-once
 ```
 Or run periodically:
 ```bash
-python3 scripts/supervisor_loop.py --repo /path/to/repo --interval 1800 --codex-timeout 300 --max-attempts 12
+python3 scripts/supervisor_loop.py --repo /path/to/repo --interval 1800 --codex-timeout 300 --max-attempts 12 --qa-retries 1 --qa-retry-sleep 5
 ```
 First run with a fresh exec (no prior Codex session):
 ```bash
@@ -73,6 +73,29 @@ python3 scripts/supervisor_loop.py --repo /path/to/repo --run-once --add-dir ../
 When a step objective includes `sync` + `skill`, supervisor will run host-side `scripts/sync_to_skill.py` directly (not via Codex shell), so sync no longer depends on Codex sandbox writes.
 For these sync steps, supervisor also bypasses the Codex no-progress fallback path, avoiding accidental rewrites of `agent/PLAN.md`/`agent/HOT.md`.
 
+### 4.1) Event-driven immediate trigger
+```bash
+python3 scripts/trigger_supervisor.py --repo /path/to/repo --reason "new-task" --task "Goal summary"
+```
+This writes `agent/TRIGGER.json`, optionally updates `agent/TASK.md`, and kickstarts launchd.
+
+### 4.2) Optional auto-PR after done
+Configure in `openclaw.json`:
+```json
+{
+  "supervisor": {
+    "autopr": {
+      "enabled": true,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": true
+    }
+  }
+}
+```
+Requires `gh` CLI auth.
+
 ### 5) Handle blocked decisions
 If `agent/STATUS.json` is `blocked`, answer the item in `agent/DECISIONS.md`, then resume.
 
@@ -93,6 +116,8 @@ Completion requires:
 ## Scripts
 - `scripts/init_openclaw_dev.py` — create agent/ files + templates.
 - `scripts/supervisor_loop.py` — resume Codex, run tests, update status.
+- `scripts/trigger_supervisor.py` — event-trigger run and optionally reset current step.
+- `scripts/autopr.py` — automated branch/commit/PR/auto-merge helper.
 
 ## References
 See `references/agent_templates.md` for the exact file templates and fields.

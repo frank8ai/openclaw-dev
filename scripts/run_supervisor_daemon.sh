@@ -8,6 +8,8 @@ TARGET_REPO="${OPENCLAW_TARGET_REPO:-${REPO_ROOT}}"
 INTERVAL="${OPENCLAW_SUPERVISOR_INTERVAL:-1800}"
 CODEX_TIMEOUT="${OPENCLAW_CODEX_TIMEOUT:-300}"
 MAX_ATTEMPTS="${OPENCLAW_MAX_ATTEMPTS:-12}"
+QA_RETRIES="${OPENCLAW_QA_RETRIES:-1}"
+QA_RETRY_SLEEP="${OPENCLAW_QA_RETRY_SLEEP:-5}"
 ADD_DIR="${OPENCLAW_ADD_DIR:-}"
 
 cmd=(
@@ -18,6 +20,8 @@ cmd=(
   --full-auto
   --codex-timeout "${CODEX_TIMEOUT}"
   --max-attempts "${MAX_ATTEMPTS}"
+  --qa-retries "${QA_RETRIES}"
+  --qa-retry-sleep "${QA_RETRY_SLEEP}"
 )
 
 if [[ -n "${ADD_DIR}" ]]; then

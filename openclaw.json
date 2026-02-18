@@ -1,8 +1,21 @@
 {
   "supervisor": {
     "default_scope": ".",
+    "qa_retries": 1,
+    "qa_retry_sleep": 5,
     "add_dirs": [
       "../skills/openclaw-dev"
-    ]
+    ],
+    "autopr": {
+      "enabled": false,
+      "required": false,
+      "mode": "dev",
+      "base": "master",
+      "branch_prefix": "autodev",
+      "auto_merge": false,
+      "commit_message": "chore: automated supervisor delivery",
+      "title": "chore: automated supervisor delivery",
+      "body_file": "agent/RESULT.md"
+    }
   }
 }
