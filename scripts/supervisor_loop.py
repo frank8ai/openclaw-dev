@@ -317,9 +317,6 @@ def _git_output(repo: Path, args: list[str]) -> tuple[int, str]:
 EXCLUDE_PATHS = (
     "memory/.vector_db",
     "memory/.vector_db_final",
-    "skills/deepsea-nexus-backup",
-    "skills/deepsea-nexus_backup",
-    "skills/deepsea-nexus-v3.0",
     "skills/openclaw-dev-repo/agent/",
     "agent/",
     "openclaw-dev-repo/agent/",
