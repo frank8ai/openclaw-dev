@@ -141,7 +141,14 @@ python3 /path/to/openclaw-dev/scripts/observability_report.py \
 ```
 The supervisor writes rolling metrics to `memory/supervisor_nightly.log` and emits `agent/ALERTS.md` when thresholds are exceeded.
 
-11) Security approvals for outbound actions:
+11) Top-1% readiness score (strict):
+```bash
+python3 /path/to/openclaw-dev/scripts/top1_readiness.py \
+  --repo /path/to/your-repo --json --fail-on-gap
+```
+This report converts runtime signal into pass/fail checks and a readiness score. Use it as a release guard for elite reliability targets.
+
+12) Security approvals for outbound actions:
 ```bash
 python3 /path/to/openclaw-dev/scripts/security_gate.py \
   --file /path/to/your-repo/agent/APPROVALS.json \
@@ -171,6 +178,7 @@ make test
 make eval
 make security
 make review
+make top1
 ```
 - Gate policy and thresholds: `docs/QUALITY_GATES.md`
 

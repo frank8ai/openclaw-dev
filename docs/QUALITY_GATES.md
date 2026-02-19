@@ -30,6 +30,7 @@ CI (Continuous Integration) in this repo means every `push`/`pull_request` runs 
 | Multi-Agent Eval | `pytest -q tests/eval/test_multi_agent_regression.py` | Route isolation + convergence checks return 0 |
 | Security | `make security` | `bandit -ii` returns 0 with `bandit.yaml` policy |
 | Review | `make review` | Review artifact checks return 0 |
+| Top1 Readiness (optional strict gate) | `make top1` | `scripts/top1_readiness.py` reports `top1_ready=yes` |
 | Full Gate | `make qa` | All gates pass in order |
 
 ## Stop and Rollback Rules

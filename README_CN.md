@@ -142,6 +142,13 @@ python3 /path/to/openclaw-dev/scripts/observability_report.py \
 ```
 supervisor 会持续写入 `memory/supervisor_nightly.log`，当阈值超限会生成 `agent/ALERTS.md`。
 
+可选：评估 Top-1% 就绪度（严格模式）：
+```bash
+python3 /path/to/openclaw-dev/scripts/top1_readiness.py \
+  --repo /path/to/your-repo --json --fail-on-gap
+```
+该报告会把运行期信号量化为硬检查项与总分，适合作为高可靠发布门禁。
+
 可选：为外部动作授予审批（例如 autopr）：
 ```bash
 python3 /path/to/openclaw-dev/scripts/security_gate.py \
@@ -163,6 +170,7 @@ make test
 make eval
 make security
 make review
+make top1
 ```
 策略与阈值见：`docs/QUALITY_GATES.md`
 

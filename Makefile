@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup lint typecheck test eval security review qa ci
+.PHONY: setup lint typecheck test eval security review top1 qa ci
 
 setup:
 	bash scripts/qa/bootstrap.sh setup
@@ -22,6 +22,9 @@ security:
 
 review:
 	bash scripts/qa/bootstrap.sh review
+
+top1:
+	python3 scripts/top1_readiness.py --repo . --fail-on-gap
 
 qa:
 	bash scripts/qa/bootstrap.sh all

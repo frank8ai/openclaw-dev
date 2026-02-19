@@ -49,3 +49,24 @@ def test_compute_alerts_triggers_on_threshold() -> None:
     }
     alerts = obs.compute_alerts(metrics, config)
     assert len(alerts) == 4
+
+
+def test_compute_metrics_timeout_progress_is_not_failure() -> None:
+    records = [
+        {"status": "codex_timeout_progress,run_tests_ok", "route_hit": True, "prompt_tokens": 200},
+        {"status": "codex_ok,tests_ok", "route_hit": True, "prompt_tokens": 250},
+    ]
+    metrics = obs.compute_metrics(records)
+    assert metrics["samples"] == 2
+    assert metrics["failure_rate"] == 0.0
+
+
+def test_compute_metrics_supports_list_status_tokens() -> None:
+    records = [
+        {"status": ["codex_ok", "tests_ok"], "route_hit": True},
+        {"status": ["codex_failed"], "route_hit": False},
+    ]
+    metrics = obs.compute_metrics(records)
+    assert metrics["samples"] == 2
+    assert metrics["failure_rate"] == 0.5
+    assert metrics["route_miss_rate"] == 0.5

@@ -26,6 +26,20 @@ FAILURE_STATUS_MARKERS = (
 )
 
 
+def _status_tokens(status_raw: object) -> list[str]:
+    if isinstance(status_raw, list):
+        tokens = []
+        for item in status_raw:
+            if isinstance(item, str):
+                cleaned = item.strip()
+                if cleaned:
+                    tokens.append(cleaned)
+        return tokens
+    if not isinstance(status_raw, str):
+        return []
+    return [item.strip() for item in status_raw.split(",") if item.strip()]
+
+
 def _load_config(repo: Path) -> dict:
     path = repo / "openclaw.json"
     merged = dict(DEFAULT_CONFIG)
@@ -77,8 +91,8 @@ def compute_metrics(records: list[dict]) -> dict:
     prompt_tokens: list[int] = []
     token_cost_usd: list[float] = []
     for record in records:
-        status = str(record.get("status", ""))
-        if any(marker in status for marker in FAILURE_STATUS_MARKERS):
+        status_tokens = _status_tokens(record.get("status", ""))
+        if any(marker in status_tokens for marker in FAILURE_STATUS_MARKERS):
             failures += 1
         if "route_hit" in record:
             route_total += 1
