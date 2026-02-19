@@ -1,12 +1,16 @@
 {
-  "state": "idle",
-  "last_update": "2026-02-16T23:50:29",
-  "current_step": 0,
-  "current_milestone": 0,
+  "state": "done",
+  "last_update": "2026-02-19T14:39:37+08:00",
+  "current_step": 5,
+  "current_milestone": 3,
   "checkpoint_id": "",
-  "last_cmd": "",
-  "last_test_ok": false,
+  "last_cmd": "bash scripts/qa/bootstrap.sh all",
+  "last_test_ok": true,
   "last_error_sig": "",
   "needs_human": false,
-  "human_question": ""
+  "human_question": "",
+  "tenant_id": "default",
+  "agent_id": "main",
+  "project_id": "openclaw-dev-repo",
+  "last_action": "finalized_after_qacmd_pass"
 }
